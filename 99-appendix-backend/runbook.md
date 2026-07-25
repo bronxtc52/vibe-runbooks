@@ -15,7 +15,7 @@ Python — язык, на котором сервер говорит с базо
 Перейди **в папку своего серверного проекта** и запусти:
 ```bash
 cd ~/путь/к/твоему/серверному/проекту
-bash /путь/к/course-setup-runbook/99-appendix-backend/install-python-venv.sh
+bash /путь/к/vibe-runbooks/99-appendix-backend/install-python-venv.sh
 ```
 Скрипт спросит подтверждение, создаст `.venv`, поставит три пакета и сделает `requirements.txt`.
 
