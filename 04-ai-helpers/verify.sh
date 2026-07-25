@@ -22,7 +22,9 @@ if has_cmd claude; then ok "Claude Code: команда claude доступна.
 if has_cmd codex;  then ok "Codex: команда codex доступна.";        else err "codex не установлен.";  fail=1; fi
 
 if [ "$fail" -eq 0 ]; then
-  ok "Фаза 04 пройдена. Дальше — 05-flutter/."
+  ok "Фаза 04 пройдена. Дальше — развилка: выбирай трек по желанию."
+  note "Мобильный трек (05-flutter/) и/или веб-трек (05w-netlify/) — можно один,"
+  note "оба или ни одного; гид спросит, что тебе ближе. Подробности — в INDEX.md."
   note "Напоминание: при первом  claude  и  codex  будет вход в аккаунт — это нормально."
   mark_step "04-ai-helpers:verified"
 else

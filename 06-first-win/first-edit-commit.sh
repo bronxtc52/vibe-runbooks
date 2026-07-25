@@ -123,3 +123,8 @@ note "• git diff показал только нужную правку;"
 note "• коммит создан (git log покажет «feat: update first app text»);"
 note "• на GitHub появился репозиторий $REPO_NAME (если шаг 5 прошёл)."
 mark_step "06-first-win:committed"
+
+step "Что дальше"
+note "Следующий шаг — проверка фазы:  bash 06-first-win/verify.sh"
+note "Когда она зелёная — финал маршрута, общий чек-поинт (фаза 07):"
+note "  bash 07-checkpoint/self-check.sh"

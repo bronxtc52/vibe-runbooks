@@ -46,11 +46,9 @@ GIT_IGNORE_DIR="$HOME/.config/git"
 GLOBAL_IGNORE="$GIT_IGNORE_DIR/ignore"
 mkdir -p "$GIT_IGNORE_DIR"
 log "Прописываю файлы, которые никогда не должны попасть в git — во всех проектах."
-# armanda.txt — служебный файл курса с личными заметками ученика (может содержать
-# ключи/пароли, записанные «для памяти»), поэтому тоже в глобальном игноре.
 for pat in \
   ".env" ".env.*" "*.key" "*.pem" "*.p8" "*.p12" "*.keystore" \
-  "id_rsa" "id_ed25519" "credentials.json" "secrets.json" "armanda.txt"; do
+  "id_rsa" "id_ed25519" "credentials.json" "secrets.json"; do
   append_line_once "$GLOBAL_IGNORE" "$pat"
 done
 git config --global core.excludesfile "$GLOBAL_IGNORE"
@@ -104,4 +102,5 @@ note "настройка сильнее, и в том проекте сторо�
 
 mark_step "03-git-github:secret-guard"
 step "Готово — защита от утечки секретов включена"
-note "Дальше подпись Git (setup-git-identity.sh), если ещё не сделал, и verify.sh."
+note "Дальше сторож команд:  bash 03-git-github/setup-command-guard.sh"
+note "Потом проверка фазы:   bash 03-git-github/verify.sh"

@@ -120,3 +120,8 @@ note "• git log показывает коммит(ы) сайта;"
 note "• на GitHub появился репозиторий $REPO_NAME (если шаг 3 прошёл);"
 note "• сайт открывается по ссылке Netlify (если шаг 4 прошёл)."
 mark_step "06w-first-site:committed"
+
+step "Что дальше"
+note "Следующий шаг — проверка фазы:  bash 06w-first-site/verify.sh"
+note "Когда она зелёная — финал маршрута, общий чек-поинт:"
+note "  bash 07-checkpoint/self-check.sh"
