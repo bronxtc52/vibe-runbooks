@@ -26,7 +26,7 @@ Codex сам подхватит инструкцию проекта из [`AGENT
 Сначала **настройка самого MacBook** (Finder, режим сна, клавиатура, безопасность, Dock — материал «настройка MacBook»), затем установка стека курса (взят из реальных уроков Фазы 0):
 Homebrew · `tree` · Git · GitHub CLI (`gh`) · Node/npm · **Claude Code** · **Codex** · затем по выбору: **мобильный трек** (Flutter · Xcode · Android Studio · CocoaPods · iOS Simulator → приложение на симуляторе + коммит/push) и/или **веб-трек** (**Netlify CLI** → сайт по живой ссылке + коммит/push).
 
-> Дополнительные инструменты Фазы 2 (Python/venv, Railway) — в [`99-appendix-backend/`](99-appendix-backend/), **по требованию**, не в первом маршруте.
+> Дополнительные инструменты Фазы 2 курса (в LMS) — Python/venv, Railway — в [`99-appendix-backend/`](99-appendix-backend/), **по требованию**, не в первом маршруте.
 
 ## Как этим пользуется Codex
 1. Читает [`FOR-CODEX.md`](FOR-CODEX.md).
@@ -46,6 +46,8 @@ Homebrew · `tree` · Git · GitHub CLI (`gh`) · Node/npm · **Claude Code** ·
 ```
 vibe-runbooks/
   README.md · FOR-CODEX.md · RITUALS.md · INDEX.md · TROUBLESHOOTING.md
+  AGENTS.md                       # авто-инструкция агента — точка входа (Codex читает её первой)
+  CLAUDE.md                       # то же для Claude Code (отсылает к AGENTS.md)
   scripts/lib.sh                  # общие функции (лог, проверки, идемпотентность, детект чипа)
   scripts/command-guard.py        # сторож команд: блок опасных команд агента (hook Claude Code)
   03-git-github/setup-secret-guard.sh  # сторож секретов (gitleaks + глобальный pre-commit)
@@ -63,6 +65,8 @@ vibe-runbooks/
   templates/project-AGENTS.md     # правила ИИ-агента для проектов новичка (commit→push→deploy)
   07-checkpoint/                  # самопроверка Фазы 0
   99-appendix-backend/            # Python/venv + Railway (по требованию)
+  tests/                          # bats-тесты скриптов и сторожей
+  .github/workflows/              # CI: shellcheck + bash -n + bats
 ```
 
 ## Принципы скриптов

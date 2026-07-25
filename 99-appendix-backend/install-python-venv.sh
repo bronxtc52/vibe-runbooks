@@ -62,6 +62,7 @@ step "Проверка"
 if grep -qi '^fastapi' requirements.txt && grep -qi '^pydantic-settings' requirements.txt && grep -qi '^asyncpg' requirements.txt; then
   ok "Все три пакета на месте. Кухня готова."
   note "Не коммить .venv в GitHub — добавь её в .gitignore. requirements.txt коммить нужно."
+  note "Готово. Вернись в урок курса (2.2), из которого ты сюда пришёл, и продолжай по нему."
 else
   warn "Не все пакеты видны в requirements.txt — проверь вывод выше."
 fi
