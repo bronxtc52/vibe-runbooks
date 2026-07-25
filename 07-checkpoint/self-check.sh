@@ -94,7 +94,7 @@ if [ "$pass" -ge "$threshold" ]; then
   note "Твой следующий шаг:"
   note "1. Открой в браузере страницу курса и войди:"
   note "      https://academy.adarasoft.com/course/vibecoding"
-  note "2. Открой урок 1.1 «Режим плана»."
+  note "2. Открой урок 1.1 «Режим плана (Plan Mode): сначала план, потом дело»."
   if [ "$flutter_skipped" = "0" ] && [ -f "$APP_DIR/pubspec.yaml" ]; then
     note "3. Перейди в папку учебного проекта (в ней идёт весь урок):"
     note "      cd ~/vibecoding/vibecoding_first_app"
