@@ -273,6 +273,7 @@ scripts/secret-scan.sh
 
 tests/helpers/assertions.bash
 tests/helpers/fake-bin.bash
+tests/helpers/plutil_stub.py
 tests/helpers/test-helper.bash
 tests/fixtures/bootstrap/good/install.sh
 tests/fixtures/bootstrap/symlink-target
@@ -952,12 +953,12 @@ CI:
 
 ### Layer 1 — contracts и безопасное ядро
 
-- [ ] Внести A1/A2 в ТЗ; сменить status плана на approved.
-- [ ] Создать test harness и сначала красные tests для guard/state/dry-run.
-- [ ] Реализовать `ui.sh`, `guard.sh`, `util.sh`.
-- [ ] Реализовать `install.sh`, `00`, `10`, `20` и templates JSON.
-- [ ] Проверить Bash 3.2, state atomicity, sudo/GUI gates.
-- [ ] Маленький атомарный commit после secret scan.
+- [x] Внести A1/A2 в ТЗ; сменить status плана на approved.
+- [x] Создать test harness и сначала красные tests для guard/state/dry-run.
+- [x] Реализовать `ui.sh`, `guard.sh`, `util.sh`.
+- [x] Реализовать `install.sh`, `00`, `10`, `20` и templates JSON.
+- [x] Проверить Bash 3.2, state atomicity, sudo/GUI gates.
+- [x] Маленький атомарный commit после secret scan.
 
 ### Layer 2 — packages, shell, runtimes
 

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "installer_version": "0.1.0-dev",
+  "install_id": "",
+  "platform": {
+    "architecture": "",
+    "macos_version": ""
+  },
+  "components": {
+    "xcode_clt": {
+      "preexisting": false,
+      "owned": false,
+      "version_before": "",
+      "version_after": ""
+    },
+    "homebrew": {
+      "preexisting": false,
+      "owned": false,
+      "version_before": "",
+      "version_after": ""
+    },
+    "oh_my_zsh": {
+      "preexisting": false,
+      "owned": false,
+      "version_before": "",
+      "version_after": ""
+    }
+  },
+  "packages": {
+    "formulae": {},
+    "casks": {},
+    "dependency_delta": []
+  },
+  "files": {},
+  "defaults": {},
+  "runtimes": {
+    "node": {
+      "version": "",
+      "owned": false
+    },
+    "python": {
+      "version": "",
+      "owned": false
+    }
+  },
+  "releases": {
+    "current": "",
+    "previous": ""
+  }
+}
