@@ -87,3 +87,26 @@ ui_pause() {
   fi
   IFS= read -r _ </dev/tty
 }
+
+ui_prompt_value() {
+  local prompt test_value answer
+  prompt="$1"
+  test_value="${2:-}"
+  answer=
+  printf '%s: ' "$prompt"
+  if [ "${VIBE_MAC_TEST_MODE:-0}" = "1" ]; then
+    answer="$test_value"
+  elif [ -r /dev/tty ]; then
+    IFS= read -r answer </dev/tty || return 1
+  else
+    printf '\n'
+    return 1
+  fi
+  printf '\n'
+  case "$answer" in
+    ""|*$'\n'*|*$'\r'*)
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$answer"
+}

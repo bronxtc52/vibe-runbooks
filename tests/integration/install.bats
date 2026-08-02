@@ -44,6 +44,21 @@ write_step() {
   [ "$first_hash" = "$second_hash" ]
 }
 
+@test "pending onboarding применяется один раз даже при зелёном verify" {
+  export VIBE_MAC_STEP_IDS="60-ai-agents"
+  write_step 60-ai-agents
+  mkdir -p "$VIBE_MAC_RUNTIME_ROOT/test-markers"
+  : >"$VIBE_MAC_RUNTIME_ROOT/test-markers/60-ai-agents"
+
+  run /bin/bash "$PROJECT_ROOT/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^apply:60-ai-agents$' "$VIBE_MAC_EVENT_LOG")" -eq 1 ]
+
+  run /bin/bash "$PROJECT_ROOT/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^apply:60-ai-agents$' "$VIBE_MAC_EVENT_LOG")" -eq 1 ]
+}
+
 @test "CLT не вызывает GUI без human gate" {
   export VIBE_MAC_TEST_CLT_MARKER="$TEST_ROOT/clt-installed"
   export VIBE_MAC_TEST_PAUSE=deny

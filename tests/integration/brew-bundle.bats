@@ -142,3 +142,18 @@ setup() {
   [ "$status" -eq 0 ]
   assert_no_events
 }
+
+@test "уже готовый bundle только фиксируется в manifest" {
+  : >"$VIBE_MAC_TEST_BUNDLE_MARKER"
+  : >"$VIBE_MAC_EVENT_LOG"
+
+  run /bin/bash "$PROJECT_ROOT/steps/30-brew-bundle.sh" apply
+
+  [ "$status" -eq 0 ]
+  ! grep -F "bundle install" "$VIBE_MAC_EVENT_LOG"
+  run "$VIBE_MAC_PLUTIL_BIN" \
+    -extract packages.formulae.jq raw -- "$VIBE_MAC_MANIFEST_FILE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"preexisting":true'* ]]
+  [[ "$output" == *'"owned":false'* ]]
+}

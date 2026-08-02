@@ -408,6 +408,16 @@ apply_bundle() {
   brew list --cask --versions >"$before_cask"
   record_packages "$before_formula" "$before_formula" "$before_cask" "$before_cask"
 
+  if bundle_ready; then
+    /bin/cp "$before_formula" "$after_formula"
+    /bin/cp "$before_cask" "$after_cask"
+    record_packages \
+      "$before_formula" "$after_formula" "$before_cask" "$after_cask"
+    record_dependency_delta "$before_formula" "$after_formula"
+    cleanup_brew_temp
+    return 0
+  fi
+
   run_bundle_file "$VIBE_MAC_ROOT/Brewfile"
   if [ "${EXTRAS:-0}" = "1" ]; then
     run_bundle_file "$VIBE_MAC_ROOT/Brewfile.extras"

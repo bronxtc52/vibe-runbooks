@@ -15,6 +15,7 @@ vibe_test_setup() {
   export VIBE_MAC_MANIFEST_FILE="$VIBE_MAC_STATE_DIR/manifest.json"
   export VIBE_MAC_LOCK_DIR="$VIBE_MAC_STATE_DIR/install.lock.d"
   export VIBE_MAC_TEST_MODE=1
+  export VIBE_MAC_INSTALL_ID=test-install
   export VIBE_MAC_TEST_OS=Darwin
   export VIBE_MAC_TEST_ARCH=arm64
   export VIBE_MAC_TEST_MACOS_VERSION=14.7.0

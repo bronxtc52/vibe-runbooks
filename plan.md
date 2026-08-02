@@ -125,6 +125,12 @@ vibe-mac-uninstall --/
 5. при ошибке останавливается, печатает ID шага и путь к приватному логу;
 6. повторный запуск начинает с первого фактически незавершённого шага.
 
+Уточнение реализации: шаги `30`, `60`, `70`, `80` и `90` имеют одноразовую
+часть onboarding/ownership. Пока их progress равен `pending`, они один раз
+выполняют `apply` даже при зелёной технической проверке (например, если CLI уже
+установлены). После `completed` действует обычный быстрый путь без повторных
+login, defaults и GUI-действий.
+
 Стабильные итоговые слова: `Установлено`, `Уже стоит`, `Пропущено`,
 `Ошибка`. Exit codes `install.sh`: `0` — техническая установка завершена,
 `1` — шаг не выполнен, `2` — platform/usage/integrity error.
@@ -971,10 +977,10 @@ CI:
 
 ### Layer 3 — agents, Git, defaults, first win
 
-- [ ] Красные tests auth isolation/human gates/default restore/workspace.
-- [ ] Реализовать `60`, `70`, `80`, `90`.
-- [ ] Проверить глобальные agent files byte-for-byte и отсутствие внешних writes.
-- [ ] Маленький атомарный commit после secret scan.
+- [x] Красные tests auth isolation/human gates/default restore/workspace.
+- [x] Реализовать `60`, `70`, `80`, `90`.
+- [x] Проверить глобальные agent files byte-for-byte и отсутствие внешних writes.
+- [x] Маленький атомарный commit после secret scan.
 
 ### Layer 4 — operations и supply chain
 

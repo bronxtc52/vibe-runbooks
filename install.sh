@@ -33,7 +33,7 @@ fi
 if is_test_mode && [ -n "${VIBE_MAC_STEP_IDS:-}" ]; then
   STEP_IDS="$VIBE_MAC_STEP_IDS"
 else
-  STEP_IDS="00-preflight 10-xcode-clt 20-homebrew 30-brew-bundle 40-shell 50-runtimes"
+  STEP_IDS="00-preflight 10-xcode-clt 20-homebrew 30-brew-bundle 40-shell 50-runtimes 60-ai-agents 70-git-github 80-defaults 90-workspace"
 fi
 
 LOCK_HELD=0
@@ -92,6 +92,24 @@ state_complete_if_known() {
   fi
 }
 
+state_step_completed() {
+  local step
+  step="$1"
+  state_has_step "$VIBE_MAC_STATE_FILE" "$step" &&
+    [ "$(state_get_status "$VIBE_MAC_STATE_FILE" "$step")" = "completed" ]
+}
+
+step_needs_first_apply() {
+  case "$1" in
+    30-brew-bundle|60-ai-agents|70-git-github|80-defaults|90-workspace)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 cleanup() {
   local exit_code
   exit_code="$?"
@@ -125,7 +143,7 @@ run_dry_plan() {
 }
 
 run_install() {
-  local step
+  local step verified
 
   init_runtime_layout
   acquire_lock
@@ -142,7 +160,13 @@ run_install() {
     CURRENT_STEP="$step"
     log_event info "$step" "Проверка шага."
 
+    verified=0
     if run_step "$step" verify >/dev/null 2>&1; then
+      verified=1
+    fi
+
+    if [ "$verified" = "1" ] &&
+      { state_step_completed "$step" || ! step_needs_first_apply "$step"; }; then
       state_complete_if_known "$step"
       ui_status "Уже стоит" "$step"
       log_event success "$step" "Уже стоит."
