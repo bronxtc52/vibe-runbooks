@@ -18,13 +18,36 @@ jobs:
     name: Full sandbox suite
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SHELLCHECK_VERSION: "0.11.0"
+      SHELLCHECK_ARCHIVE_URL: "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.gz"
+      SHELLCHECK_ARCHIVE_SHA256: "b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6"
     steps:
       - name: Checkout exact action commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Install test tools
+      - name: Install sandbox tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y bats shellcheck python3 ripgrep
+          sudo apt-get install -y bats ca-certificates curl python3 ripgrep
+      - name: Install pinned ShellCheck
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          archive="$RUNNER_TEMP/shellcheck.tar.gz"
+          extract_dir="$RUNNER_TEMP/shellcheck"
+          bin_dir="$RUNNER_TEMP/bin"
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+            --output "$archive" "$SHELLCHECK_ARCHIVE_URL"
+          printf '%s  %s\n' "$SHELLCHECK_ARCHIVE_SHA256" "$archive" | \
+            sha256sum --check --strict
+          mkdir -p "$extract_dir" "$bin_dir"
+          tar -xzf "$archive" -C "$extract_dir"
+          install -m 0755 \
+            "$extract_dir/shellcheck-v$SHELLCHECK_VERSION/shellcheck" \
+            "$bin_dir/shellcheck"
+          "$bin_dir/shellcheck" --version | \
+            grep -F "version: $SHELLCHECK_VERSION"
+          printf '%s\n' "$bin_dir" >>"$GITHUB_PATH"
       - name: Run all checks
         run: ./scripts/check.sh
 

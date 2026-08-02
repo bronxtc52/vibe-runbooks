@@ -58,6 +58,23 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "CI использует pinned официальный ShellCheck с literal SHA-256" {
+  workflow="$PROJECT_ROOT/.github/workflows/ci.yml"
+
+  /usr/bin/grep -Fq 'SHELLCHECK_VERSION: "0.11.0"' "$workflow"
+  /usr/bin/grep -Fq \
+    'SHELLCHECK_ARCHIVE_URL: "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.gz"' \
+    "$workflow"
+  /usr/bin/grep -Fq \
+    'SHELLCHECK_ARCHIVE_SHA256: "b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6"' \
+    "$workflow"
+  /usr/bin/grep -Fq 'sha256sum --check --strict' "$workflow"
+  /usr/bin/grep -Fq 'shellcheck" --version' "$workflow"
+
+  run rg -n 'apt-get install[^#]*shellcheck' "$workflow"
+  [ "$status" -eq 1 ]
+}
+
 @test "check script рекурсивно собирает все три Bats-группы" {
   /usr/bin/grep -Fq '"$PROJECT_ROOT/tests/unit"' \
     "$PROJECT_ROOT/scripts/check.sh"
