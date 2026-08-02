@@ -284,11 +284,13 @@ tests/unit/ui.bats
 tests/unit/util.bats
 tests/integration/auth.bats
 tests/integration/bootstrap.bats
+tests/integration/brew-bundle.bats
 tests/integration/defaults.bats
 tests/integration/doctor.bats
 tests/integration/dry-run.bats
 tests/integration/install.bats
 tests/integration/resume.bats
+tests/integration/runtimes.bats
 tests/integration/shell.bats
 tests/integration/uninstall.bats
 tests/integration/verify.bats
@@ -962,10 +964,10 @@ CI:
 
 ### Layer 2 — packages, shell, runtimes
 
-- [ ] Красные tests exact Brew policy/preexisting/managed blocks/runtime pins.
-- [ ] Реализовать Brewfiles, `30`, `40`, `50` и config templates.
-- [ ] Доказать idempotency и dependency-delta report.
-- [ ] Маленький атомарный commit после secret scan.
+- [x] Красные tests exact Brew policy/preexisting/managed blocks/runtime pins.
+- [x] Реализовать Brewfiles, `30`, `40`, `50` и config templates.
+- [x] Доказать idempotency и dependency-delta report.
+- [x] Маленький атомарный commit после secret scan.
 
 ### Layer 3 — agents, Git, defaults, first win
 

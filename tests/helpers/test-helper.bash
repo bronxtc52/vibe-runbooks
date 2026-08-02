@@ -9,6 +9,11 @@ vibe_test_setup() {
   export HOME="$TEST_ROOT/home"
   export VIBE_MAC_RUNTIME_ROOT="$HOME/.vibe-mac"
   export VIBE_MAC_BACKUP_ROOT="$HOME/.vibe-mac-backup"
+  export VIBE_MAC_STATE_DIR="$VIBE_MAC_RUNTIME_ROOT/state"
+  export VIBE_MAC_LOG_DIR="$VIBE_MAC_RUNTIME_ROOT/logs"
+  export VIBE_MAC_STATE_FILE="$VIBE_MAC_STATE_DIR/progress.json"
+  export VIBE_MAC_MANIFEST_FILE="$VIBE_MAC_STATE_DIR/manifest.json"
+  export VIBE_MAC_LOCK_DIR="$VIBE_MAC_STATE_DIR/install.lock.d"
   export VIBE_MAC_TEST_MODE=1
   export VIBE_MAC_TEST_OS=Darwin
   export VIBE_MAC_TEST_ARCH=arm64

@@ -33,7 +33,7 @@ fi
 if is_test_mode && [ -n "${VIBE_MAC_STEP_IDS:-}" ]; then
   STEP_IDS="$VIBE_MAC_STEP_IDS"
 else
-  STEP_IDS="00-preflight 10-xcode-clt 20-homebrew"
+  STEP_IDS="00-preflight 10-xcode-clt 20-homebrew 30-brew-bundle 40-shell 50-runtimes"
 fi
 
 LOCK_HELD=0

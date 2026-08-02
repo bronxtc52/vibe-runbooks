@@ -60,23 +60,28 @@ def main() -> None:
             print(json.dumps(value, separators=(",", ":")))
         return
 
-    if args[0] == "-replace":
+    if args[0] in {"-replace", "-insert"}:
         if os.environ.get("PLUTIL_STUB_FAIL_REPLACE") == "1":
             die("injected replace failure")
+        operation = args[0]
         keypath = args[1]
         value_type = args[2]
         value = args[3]
         path = Path(args[-1])
         data = load(path)
         parent, key = walk(data, keypath)
-        if key not in parent:
+        if operation == "-replace" and key not in parent:
             die("missing key")
+        if operation == "-insert" and key in parent:
+            die("key already exists")
         if value_type == "-string":
             parent[key] = value
         elif value_type == "-integer":
             parent[key] = int(value)
         elif value_type == "-bool":
             parent[key] = value.lower() in {"yes", "true", "1"}
+        elif value_type == "-json":
+            parent[key] = json.loads(value)
         else:
             die("unsupported type")
         path.write_text(

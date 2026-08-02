@@ -44,6 +44,26 @@ have() {
   command -v "$1" >/dev/null 2>&1
 }
 
+version_at_least() {
+  local actual minimum
+  actual="$1"
+  minimum="$2"
+  /usr/bin/awk -v actual="$actual" -v minimum="$minimum" '
+    BEGIN {
+      actual_count = split(actual, a, ".")
+      minimum_count = split(minimum, m, ".")
+      count = actual_count > minimum_count ? actual_count : minimum_count
+      for (i = 1; i <= count; i++) {
+        av = a[i] + 0
+        mv = m[i] + 0
+        if (av > mv) exit 0
+        if (av < mv) exit 1
+      }
+      exit 0
+    }
+  '
+}
+
 utc_now() {
   /bin/date -u '+%Y-%m-%dT%H:%M:%SZ'
 }
@@ -127,6 +147,21 @@ private_parent_dir() {
   /bin/chmod 0700 "$parent"
 }
 
+ensure_parent_dir() {
+  local target parent
+  target="$1"
+  parent="${target%/*}"
+  if [ "$parent" = "$target" ] || [ -z "$parent" ] || [ -L "$parent" ]; then
+    printf 'Ошибка: небезопасный родительский каталог.\n' >&2
+    return 2
+  fi
+  if [ ! -d "$parent" ]; then
+    umask 077
+    /bin/mkdir -p "$parent"
+    /bin/chmod 0700 "$parent"
+  fi
+}
+
 atomic_copy() {
   local source target temp
   source="$1"
@@ -192,6 +227,75 @@ json_replace_string_atomic() {
   json_replace_strings_atomic "$file" "$key" "$value" "$current_key" "$current"
 }
 
+validate_json_keypath() {
+  case "$1" in
+    ""|.*|*.|*..*|*[!A-Za-z0-9_.@-]*)
+      printf 'Ошибка: небезопасный JSON key path.\n' >&2
+      return 2
+      ;;
+  esac
+}
+
+json_set_json_atomic() {
+  local file keypath json_value temp operation
+  file="$1"
+  keypath="$2"
+  json_value="$3"
+  validate_json_keypath "$keypath"
+  if [ ! -f "$file" ] || [ -L "$file" ]; then
+    printf 'Ошибка: JSON отсутствует или является symlink: %s\n' "$file" >&2
+    return 2
+  fi
+  temp="$(/usr/bin/mktemp "$file.tmp.XXXXXX")"
+  /bin/cp "$file" "$temp"
+  if plutil_run -extract "$keypath" raw -- "$temp" >/dev/null 2>&1; then
+    operation=-replace
+  else
+    operation=-insert
+  fi
+  if ! plutil_run "$operation" "$keypath" -json "$json_value" "$temp" >/dev/null; then
+    /bin/unlink "$temp" 2>/dev/null || true
+    return 2
+  fi
+  if ! json_lint "$temp"; then
+    /bin/unlink "$temp" 2>/dev/null || true
+    return 2
+  fi
+  /bin/chmod 0600 "$temp"
+  /bin/mv -f "$temp" "$file"
+}
+
+manifest_record_package() {
+  local kind name preexisting owned owner before after json
+  kind="$1"
+  name="$2"
+  preexisting="$3"
+  owned="$4"
+  owner="$5"
+  before="$6"
+  after="$7"
+  case "$kind" in formulae|casks) ;; *) return 2 ;; esac
+  case "$name" in ""|*[!A-Za-z0-9@._+-]*) return 2 ;; esac
+  case "$preexisting:$owned" in
+    true:true|true:false|false:true|false:false) ;;
+    *) return 2 ;;
+  esac
+  case "$owner" in homebrew|external|vibe-mac) ;; *) return 2 ;; esac
+  if ! printf '%s' "$before$after" |
+    LC_ALL=C /usr/bin/grep -Eq '^[A-Za-z0-9@._+,: -]*$'; then
+    return 2
+  fi
+  json="{\"preexisting\":$preexisting,\"owned\":$owned,\"owner\":\"$owner\",\"version_before\":\"$before\",\"version_after\":\"$after\"}"
+  json_set_json_atomic "$VIBE_MAC_MANIFEST_FILE" "packages.$kind.$name" "$json"
+}
+
+manifest_record_dependency_delta() {
+  json_set_json_atomic \
+    "$VIBE_MAC_MANIFEST_FILE" \
+    packages.dependency_delta \
+    "$1"
+}
+
 state_init() {
   local template target schema expected
   template="$1"
@@ -238,7 +342,7 @@ state_mark_complete() {
 }
 
 manifest_init() {
-  local template target schema expected
+  local template target schema expected install_id
   template="$1"
   target="$2"
   expected="${MANIFEST_SCHEMA_VERSION:-1}"
@@ -257,6 +361,14 @@ manifest_init() {
     printf 'Ошибка: неизвестная версия manifest schema: %s.\n' "$schema" >&2
     return 2
   fi
+
+  install_id="$(json_extract_raw "$target" install_id)"
+  if [ -z "$install_id" ]; then
+    install_id="${VIBE_MAC_INSTALL_ID:-$(run_id_now)}"
+    json_replace_string_atomic "$target" install_id "$install_id" schema_version
+  fi
+  VIBE_MAC_INSTALL_ID="$install_id"
+  export VIBE_MAC_INSTALL_ID
 }
 
 init_runtime_layout() {
@@ -420,10 +532,200 @@ safe_download() {
 }
 
 configure_homebrew_path() {
+  if is_test_mode; then
+    return 0
+  fi
   if [ -x /opt/homebrew/bin/brew ]; then
     PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
   elif [ -x /usr/local/bin/brew ]; then
     PATH="/usr/local/bin:/usr/local/sbin:$PATH"
   fi
   export PATH
+}
+
+file_mode() {
+  local file
+  file="$1"
+  if /usr/bin/stat -f '%Lp' "$file" >/dev/null 2>&1; then
+    /usr/bin/stat -f '%Lp' "$file"
+  else
+    /usr/bin/stat -c '%a' "$file"
+  fi
+}
+
+validate_logical_id() {
+  case "$1" in
+    ""|*[!A-Za-z0-9._-]*)
+      printf 'Ошибка: небезопасный logical ID: %s.\n' "$1" >&2
+      return 2
+      ;;
+  esac
+}
+
+backup_file_once() {
+  local source logical install_id backup_dir backup absent
+  source="$1"
+  logical="$2"
+  validate_logical_id "$logical"
+  install_id="${VIBE_MAC_INSTALL_ID:-}"
+  validate_logical_id "$install_id"
+  backup_dir="$VIBE_MAC_BACKUP_ROOT/$install_id"
+  backup="$backup_dir/$logical.before"
+  absent="$backup_dir/$logical.absent"
+
+  umask 077
+  /bin/mkdir -p "$backup_dir"
+  /bin/chmod 0700 "$VIBE_MAC_BACKUP_ROOT" "$backup_dir"
+
+  if [ -e "$backup" ] || [ -e "$absent" ]; then
+    if [ -e "$backup" ]; then
+      printf '%s\n' "$backup"
+    else
+      printf '%s\n' "$absent"
+    fi
+    return 0
+  fi
+
+  if [ -L "$source" ]; then
+    printf 'Ошибка: backup source является symlink: %s.\n' "$source" >&2
+    return 2
+  fi
+  if [ -f "$source" ]; then
+    /bin/cp -p "$source" "$backup"
+    /bin/chmod 0600 "$backup"
+    printf '%s\n' "$backup"
+  elif [ ! -e "$source" ]; then
+    : >"$absent"
+    /bin/chmod 0600 "$absent"
+    printf '%s\n' "$absent"
+  else
+    printf 'Ошибка: backup source не является обычным файлом: %s.\n' "$source" >&2
+    return 2
+  fi
+}
+
+managed_block_upsert() {
+  local target block_id content logical begin end begin_count end_count
+  local parent temp mode
+  target="$1"
+  block_id="$2"
+  content="$3"
+  logical="$4"
+  validate_logical_id "$block_id"
+  validate_logical_id "$logical"
+  begin="# >>> vibe-mac managed:$block_id >>>"
+  end="# <<< vibe-mac managed:$block_id <<<"
+
+  if [ -L "$target" ]; then
+    printf 'Ошибка: managed target является symlink: %s.\n' "$target" >&2
+    return 2
+  fi
+  if [ -e "$target" ] && [ ! -f "$target" ]; then
+    printf 'Ошибка: managed target не является обычным файлом: %s.\n' "$target" >&2
+    return 2
+  fi
+
+  begin_count=0
+  end_count=0
+  if [ -f "$target" ]; then
+    begin_count="$(/usr/bin/grep -Fxc "$begin" "$target" || true)"
+    end_count="$(/usr/bin/grep -Fxc "$end" "$target" || true)"
+  fi
+  if [ "$begin_count" -ne "$end_count" ] || [ "$begin_count" -gt 1 ]; then
+    printf 'Ошибка: malformed managed block в %s.\n' "$target" >&2
+    return 2
+  fi
+
+  parent="${target%/*}"
+  ensure_parent_dir "$target"
+  temp="$(/usr/bin/mktemp "$parent/.vibe-mac-block.XXXXXX")"
+
+  if [ -f "$target" ]; then
+    if ! /usr/bin/awk -v begin="$begin" -v end="$end" '
+      $0 == begin {
+        if (inside || seen) exit 40
+        inside = 1
+        seen = 1
+        next
+      }
+      $0 == end {
+        if (!inside) exit 41
+        inside = 0
+        next
+      }
+      !inside { print }
+      END {
+        if (inside) exit 42
+      }
+    ' "$target" >"$temp"; then
+      /bin/unlink "$temp" 2>/dev/null || true
+      printf 'Ошибка: не удалось разобрать managed block.\n' >&2
+      return 2
+    fi
+    mode="$(file_mode "$target")"
+  else
+    : >"$temp"
+    mode=600
+  fi
+
+  {
+    printf '%s\n' "$begin"
+    printf '%s\n' "$content"
+    printf '%s\n' "$end"
+  } >>"$temp"
+
+  if [ -f "$target" ] && /usr/bin/cmp -s "$target" "$temp"; then
+    /bin/unlink "$temp"
+    return 0
+  fi
+
+  backup_file_once "$target" "$logical" >/dev/null
+  /bin/chmod "$mode" "$temp"
+  /bin/mv -f "$temp" "$target"
+}
+
+install_file_if_absent() {
+  local source target logical parent temp
+  source="$1"
+  target="$2"
+  logical="$3"
+  validate_logical_id "$logical"
+  if [ ! -f "$source" ] || [ -L "$source" ]; then
+    printf 'Ошибка: template отсутствует или небезопасен: %s.\n' "$source" >&2
+    return 2
+  fi
+  if [ -L "$target" ]; then
+    printf 'Ошибка: config target является symlink: %s.\n' "$target" >&2
+    return 2
+  fi
+  if [ -e "$target" ]; then
+    [ -f "$target" ]
+    return
+  fi
+
+  parent="${target%/*}"
+  ensure_parent_dir "$target"
+  backup_file_once "$target" "$logical" >/dev/null
+  temp="$(/usr/bin/mktemp "$parent/.vibe-mac-file.XXXXXX")"
+  /bin/cp "$source" "$temp"
+  /bin/chmod 0600 "$temp"
+  /bin/mv -f "$temp" "$target"
+}
+
+remove_temp_tree() {
+  local target base
+  target="$1"
+  base="${TMPDIR:-/tmp}"
+  case "$target" in
+    "$base"/vibe-mac.*|"$base"/vibe-mac-*)
+      ;;
+    *)
+      printf 'Ошибка: отказ от очистки неожиданного temp path.\n' >&2
+      return 2
+      ;;
+  esac
+  if [ ! -d "$target" ] || [ -L "$target" ]; then
+    return 2
+  fi
+  /usr/bin/find "$target" -depth -delete
 }

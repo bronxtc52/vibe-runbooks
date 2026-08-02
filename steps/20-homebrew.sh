@@ -111,7 +111,8 @@ install_homebrew() {
   homebrew_installed
 }
 
-trap cleanup_homebrew EXIT INT TERM HUP
+trap cleanup_homebrew EXIT
+trap 'exit 130' INT TERM HUP
 
 case "${1:-}" in
   plan)

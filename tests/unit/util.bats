@@ -94,3 +94,13 @@ setup() {
   [ "$status" -ne 0 ]
   assert_path_absent "$target"
 }
+
+@test "version_at_least сравнивает date-style версии mise" {
+  run /bin/bash -c \
+    'source "$PROJECT_ROOT/lib/util.sh"; version_at_least 2026.8.0 2026.8.0'
+  [ "$status" -eq 0 ]
+
+  run /bin/bash -c \
+    'source "$PROJECT_ROOT/lib/util.sh"; version_at_least 2026.7.9 2026.8.0'
+  [ "$status" -ne 0 ]
+}
