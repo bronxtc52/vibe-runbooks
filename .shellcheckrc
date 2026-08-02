@@ -1,6 +1,2 @@
 shell=bash
 source-path=SCRIPTDIR
-
-# Источники подключаются через проверенный VIBE_MAC_ROOT, поэтому ShellCheck
-# не может статически разрешить часть dynamic source paths.
-disable=SC1091

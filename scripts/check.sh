@@ -63,7 +63,7 @@ snapshot_agent_files() {
 }
 
 run_smoke() {
-  local before after smoke_home runtime state event_log
+  local before after smoke_home runtime state event_log doctor_status
   printf '%s\n' "[2/4] Synthetic zero-write smoke"
   CHECK_TEMP="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/vibe-mac-check.XXXXXX")"
   /bin/chmod 0700 "$CHECK_TEMP"
@@ -99,12 +99,14 @@ run_smoke() {
   /bin/cp "$PROJECT_ROOT/state/manifest-template.json" "$state/manifest.json"
   /bin/chmod 0600 "$state/progress.json" "$state/manifest.json"
 
+  doctor_status=0
   env \
     HOME="$smoke_home" \
     VIBE_MAC_TEST_MODE=1 \
     VIBE_MAC_PLUTIL_BIN="$PROJECT_ROOT/tests/helpers/plutil_stub.py" \
     DRY_RUN=1 \
-    /bin/bash "$PROJECT_ROOT/doctor.sh" --dry-run
+    /bin/bash "$PROJECT_ROOT/doctor.sh" --dry-run || doctor_status="$?"
+  [ "$doctor_status" -eq 1 ]
   env \
     HOME="$smoke_home" \
     VIBE_MAC_TEST_MODE=1 \
@@ -130,7 +132,7 @@ run_shellcheck() {
     "$PROJECT_ROOT"/lib/*.sh \
     "$PROJECT_ROOT"/steps/*.sh \
     "$PROJECT_ROOT"/scripts/*.sh; do
-    shellcheck --shell=bash "$file" || failed=1
+    shellcheck -x -P "$PROJECT_ROOT" --shell=bash "$file" || failed=1
   done
   [ "$failed" -eq 0 ]
 }

@@ -90,12 +90,7 @@ guard_platform() {
         ui_warn "Показан экспериментальный план для Intel; изменений не будет."
         return 0
       fi
-      if ! ui_confirm_typed \
-        "Intel-режим не поддерживается и может завершиться ошибкой." \
-        INTEL; then
-        ui_fail "Intel-режим не подтверждён."
-        return 2
-      fi
+      ui_warn "Перед typed INTEL будет показан полный read-only план."
       ;;
     *)
       ui_fail "Неизвестная архитектура Mac: $arch."
@@ -131,27 +126,42 @@ guard_disk() {
 }
 
 guard_network() {
+  local curl_bin run_user network_tmp event_log
   if [ "$DRY_RUN" = "1" ]; then
     return 0
   fi
   if is_test_mode; then
-    if [ "${VIBE_MAC_TEST_NETWORK:-ok}" = "ok" ]; then
-      return 0
-    fi
-    ui_fail "Нет доступа к официальным источникам."
-    return 1
+    [ "${VIBE_MAC_TEST_NETWORK:-ok}" = "ok" ] || {
+      ui_fail "Нет доступа к официальным источникам."
+      return 1
+    }
+    [ -n "${VIBE_MAC_CURL_BIN:-}" ] || return 0
+    curl_bin="$VIBE_MAC_CURL_BIN"
+    network_tmp="${TMPDIR:-/tmp}"
+    event_log="${VIBE_MAC_EVENT_LOG:-}"
+  else
+    curl_bin=/usr/bin/curl
+    network_tmp=/tmp
+    event_log=
   fi
-  if ! retry /usr/bin/curl \
-    --proto '=https' \
-    --tlsv1.2 \
-    --fail \
-    --location \
-    --silent \
-    --show-error \
-    --connect-timeout 10 \
-    --max-time 20 \
-    --output /dev/null \
-    https://github.com/; then
+  run_user="$(/usr/bin/id -un)" || return 2
+  if ! retry /usr/bin/env -i \
+    HOME="$HOME" USER="$run_user" LOGNAME="$run_user" SHELL=/bin/zsh \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    TMPDIR="$network_tmp" \
+    LC_ALL=C CURL_HOME=/var/empty \
+    VIBE_MAC_EVENT_LOG="$event_log" \
+    "$curl_bin" -q \
+      --proto '=https' \
+      --tlsv1.2 \
+      --fail \
+      --location \
+      --silent \
+      --show-error \
+      --connect-timeout 10 \
+      --max-time 20 \
+      --output /dev/null \
+      https://github.com/; then
     ui_fail "Нет доступа к GitHub. Проверь интернет и повтори запуск."
     return 1
   fi
@@ -163,7 +173,8 @@ guard_required_system_tools() {
     [ "${VIBE_MAC_TEST_SYSTEM_TOOLS:-ok}" = "ok" ]
     return
   fi
-  for tool in /bin/bash /bin/zsh /usr/bin/curl /usr/bin/shasum \
+  for tool in /bin/bash /bin/zsh /bin/realpath /usr/bin/curl /usr/bin/env \
+    /usr/bin/id /usr/bin/plutil /usr/bin/shasum \
     /usr/bin/tar /usr/bin/awk /usr/bin/sed /usr/bin/grep /usr/bin/find \
     /usr/bin/stat /bin/df /bin/mkdir /bin/mv /bin/cp /bin/chmod; do
     if [ ! -x "$tool" ]; then

@@ -44,15 +44,59 @@ def main() -> None:
         load(Path(args[-1]))
         return
 
+    if args[0] == "-convert":
+        if len(args) < 6 or args[1] != "json" or "-o" not in args:
+            die("unsupported convert operation")
+        output_index = args.index("-o") + 1
+        if output_index >= len(args):
+            die("missing output path")
+        output_path = args[output_index]
+        data = load(Path(args[-1]))
+        converted = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+        if output_path == "/dev/null":
+            return
+        if output_path == "-":
+            print(converted)
+            return
+        Path(output_path).write_text(converted + "\n", encoding="utf-8")
+        return
+
     if args[0] == "-extract":
         keypath = args[1]
+        output_format = args[2]
+        if output_format not in {"json", "raw"}:
+            die("unsupported extract format")
         path = Path(args[-1])
         data = load(path)
         parent, key = walk(data, keypath)
         if key not in parent:
             die("missing key")
         value = parent[key]
-        if isinstance(value, bool):
+        if "-expect" in args:
+            expected_index = args.index("-expect") + 1
+            if expected_index >= len(args):
+                die("missing expected type")
+            expected = args[expected_index]
+            expected_types = {
+                "array": list,
+                "bool": bool,
+                "dictionary": dict,
+                "integer": int,
+                "string": str,
+            }
+            if expected not in expected_types:
+                die("unsupported expected type")
+            if not isinstance(value, expected_types[expected]) or (
+                expected == "integer" and isinstance(value, bool)
+            ):
+                die("unexpected type")
+        if output_format == "json":
+            print(json.dumps(value, separators=(",", ":"), ensure_ascii=False))
+        elif isinstance(value, dict):
+            print("\n".join(value))
+        elif isinstance(value, list):
+            print(len(value))
+        elif isinstance(value, bool):
             print("true" if value else "false")
         elif isinstance(value, (str, int, float)):
             print(value)

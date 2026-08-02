@@ -7,12 +7,16 @@ vibe-mac-verify
 vibe-mac-doctor
 ```
 
-Если versioned bundle ещё не установлен, запускай их из проверенного checkout:
+Если versioned bundle ещё не установлен, из проверенного checkout доступны
+doctor и dry-run удаления:
 
 ```bash
-/bin/bash ./verify.sh
 /bin/bash ./doctor.sh
+/bin/bash ./uninstall.sh --dry-run
 ```
+
+Checkout-версия `verify.sh` не подменяет активный release: без установленного
+проверенного bundle она намеренно возвращает integrity exit `2`.
 
 Обычный doctor ничего не меняет. Не используй `--repair`, пока не прочитал
 показанный план.
@@ -20,8 +24,15 @@ vibe-mac-doctor
 ## Mac не поддерживается
 
 `vibe-mac` рассчитан на Apple Silicon и macOS 14+. Обнови macOS, затем
-повтори запуск. Intel можно разрешить только как неподдерживаемый best-effort
-режим:
+повтори запуск. Intel можно разрешить только как неподдерживаемый экспериментальный
+режим. Сначала отдельно посмотри план:
+
+```bash
+DRY_RUN=1 ALLOW_UNSUPPORTED_INTEL=1 /bin/bash ./install.sh
+```
+
+Затем запусти установку без `DRY_RUN`. Она повторно покажет весь план без изменений и до первой записи
+потребует точное слово `INTEL`:
 
 ```bash
 ALLOW_UNSUPPORTED_INTEL=1 /bin/bash ./install.sh
@@ -54,6 +65,12 @@ DRY_RUN=1 /bin/bash ./install.sh
 `vibe-mac` не запускает upgrade, reinstall, cleanup или zap для уже
 установленных прямых пакетов. Homebrew всё же может обновить нужную новому
 пакету транзитивную зависимость; она будет отмечена в manifest.
+
+Команда с тем же именем только в `PATH` не считается уже установленным
+пакетом: это защищает установку и удаление от подмены executable. Для
+обязательного CLI проверяются точный Homebrew-prefix и receipt. Исключения —
+реальный GUI-бандл в разрешённом пути `/Applications` и подходящий Nerd Font
+непосредственно в `~/Library/Fonts`; символические ссылки не принимаются.
 
 ## Установка остановилась
 
@@ -92,20 +109,23 @@ vibe-mac-doctor --repair
 
 ## Вход в аккаунт отложен или не завершён
 
-Техническая установка может закончиться без входов. Повтори нужную официальную
-команду в Терминале:
+Техническая установка может закончиться без входов. На Apple Silicon повтори
+нужную официальную команду в Терминале:
 
 ```bash
-gh auth login --web --git-protocol https
-claude auth login
-codex login
-cursor-agent login
-open -a Cursor
+/opt/homebrew/bin/gh auth login --hostname github.com --web --git-protocol https
+/opt/homebrew/bin/claude auth login
+/opt/homebrew/bin/codex login
+/opt/homebrew/bin/cursor-agent login
+/usr/bin/open /Applications/Cursor.app
 ```
 
+В экспериментальном Intel-режиме замени `/opt/homebrew` на `/usr/local`.
+
 Не вставляй API-ключи в установщик, конфиги, issue или сообщения. После входа
-запусти `vibe-mac-verify`: статусы аккаунтов выводятся отдельно от 12
-технических критериев.
+запусти `vibe-mac-verify`: офлайн-статусы аккаунтов выводятся отдельно от 12
+технических критериев. `verify` сам не обращается к сервисам и не запускает
+auth CLI — используй напечатанную им точную команду ручной проверки.
 
 ## Не хочу менять Dock и Finder
 

@@ -8,6 +8,7 @@ release/
 tmp/
 .bats-run/
 .vibe-mac-test/
+__pycache__/
 
 # Runtime state создаётся только при локальном запуске
 state/progress.json

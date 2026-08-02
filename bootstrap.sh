@@ -7,10 +7,16 @@ set -euo pipefail
 RELEASE_VERSION="__VIBE_MAC_RELEASE_VERSION__"
 ARCHIVE_URL="__VIBE_MAC_ARCHIVE_URL__"
 ARCHIVE_SHA256="__VIBE_MAC_ARCHIVE_SHA256__"
+VIBE_MAC_BOOTSTRAP_BUILD_CHANNEL="__VIBE_MAC_BOOTSTRAP_BUILD_CHANNEL__"
+readonly VIBE_MAC_BOOTSTRAP_BUILD_CHANNEL
 
 TEMP_DIR=
 INCOMING_DIR=
 RELEASE_TREE_SHA=
+PREVIOUS_CURRENT_TARGET=
+ACTIVE_CURRENT_TARGET=
+PREINSTALL_PROGRESS_FINGERPRINT=
+PREINSTALL_MANIFEST_FINGERPRINT=
 
 fail_integrity() {
   printf 'Ошибка: %s\n' "$1" >&2
@@ -78,6 +84,20 @@ validate_bool_standalone() {
   esac
 }
 
+configure_bootstrap_build_channel() {
+  if [ "$VIBE_MAC_BOOTSTRAP_BUILD_CHANNEL" = \
+    "__VIBE_MAC_BOOTSTRAP_""BUILD_CHANNEL__" ]; then
+    validate_bool_standalone \
+      VIBE_MAC_TEST_MODE "${VIBE_MAC_TEST_MODE:-0}"
+    return
+  fi
+  if [ "$VIBE_MAC_BOOTSTRAP_BUILD_CHANNEL" != production ]; then
+    fail_integrity "неизвестный bootstrap build channel."
+  fi
+  VIBE_MAC_TEST_MODE=0
+  export VIBE_MAC_TEST_MODE
+}
+
 configure_release_values() {
   if [ "${VIBE_MAC_TEST_MODE:-0}" = 1 ]; then
     RELEASE_VERSION="${VIBE_MAC_RELEASE_VERSION:-$RELEASE_VERSION}"
@@ -125,26 +145,48 @@ verify_self() {
     fail_integrity "bootstrap SHA-256 не совпал."
 }
 
+validate_runtime_root_standalone() {
+  [ -d "$HOME" ] && [ ! -L "$HOME" ] ||
+    fail_integrity "HOME не является безопасным каталогом."
+  if [ "${VIBE_MAC_TEST_MODE:-0}" != 1 ]; then
+    [ "$VIBE_MAC_RUNTIME_ROOT" = "$HOME/.vibe-mac" ] ||
+      fail_integrity "runtime root выходит за production allowlist."
+  fi
+}
+
 download_archive() {
-  local curl_bin attempt status
+  local curl_bin attempt status run_user
   if [ "${VIBE_MAC_TEST_MODE:-0}" = 1 ]; then
     curl_bin="${VIBE_MAC_CURL_BIN:?test curl не задан}"
   else
     curl_bin=/usr/bin/curl
   fi
+  run_user="$(/usr/bin/id -un)" || return 2
   attempt=1
   while [ "$attempt" -le 3 ]; do
-    if "$curl_bin" \
-      --proto '=https' \
-      --tlsv1.2 \
-      --fail \
-      --location \
-      --silent \
-      --show-error \
-      --connect-timeout 15 \
-      --max-time 300 \
-      --output "$1" \
-      "$ARCHIVE_URL"; then
+    if [ "${VIBE_MAC_TEST_MODE:-0}" = 1 ]; then
+      if /usr/bin/env -i \
+        HOME="$HOME" USER="$run_user" LOGNAME="$run_user" SHELL=/bin/zsh \
+        PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+        TMPDIR="${TMPDIR:-/tmp}" LC_ALL=C \
+        VIBE_MAC_ARCHIVE_SOURCE="${VIBE_MAC_ARCHIVE_SOURCE:-}" \
+        VIBE_MAC_EVENT_LOG="${VIBE_MAC_EVENT_LOG:-}" \
+        "$curl_bin" -q \
+          --proto '=https' --tlsv1.2 --fail --location \
+          --silent --show-error --connect-timeout 15 --max-time 300 \
+          --output "$1" "$ARCHIVE_URL"; then
+        return 0
+      else
+        status="$?"
+      fi
+    elif /usr/bin/env -i \
+      HOME="$HOME" USER="$run_user" LOGNAME="$run_user" SHELL=/bin/zsh \
+      PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp LC_ALL=C \
+      CURL_HOME=/var/empty \
+      "$curl_bin" -q \
+        --proto '=https' --tlsv1.2 --fail --location \
+        --silent --show-error --connect-timeout 15 --max-time 300 \
+        --output "$1" "$ARCHIVE_URL"; then
       return 0
     else
       status="$?"
@@ -242,11 +284,11 @@ tree_sha256_standalone() {
   (
     cd "$root"
     /usr/bin/find . -mindepth 1 \
-      ! -name .bundle-sha256 \
-      ! -name .bundle-tree-sha256 \
+      ! -path './.bundle-sha256' \
+      ! -path './.bundle-tree-sha256' \
       -print | LC_ALL=C /usr/bin/sort |
       while IFS= read -r path; do
-        case "$path" in *$'\n'*|*$'\r'*) exit 2 ;; esac
+        case "$path" in *$'\n'*|*$'\r'*|*$'\t'*) exit 2 ;; esac
         if [ -L "$path" ]; then
           exit 2
         elif [ -f "$path" ]; then
@@ -337,6 +379,20 @@ preflight_current() {
     fail_integrity "существующий current dangling или небезопасен."
 }
 
+replace_symlink_atomically() {
+  local source destination
+  source="$1"
+  destination="$2"
+  [ -L "$source" ] || fail_integrity "atomic symlink source отсутствует."
+  if /bin/mv -f -h "$source" "$destination" 2>/dev/null; then
+    return 0
+  fi
+  if /bin/mv -fT "$source" "$destination" 2>/dev/null; then
+    return 0
+  fi
+  fail_operation "не удалось атомарно заменить current symlink."
+}
+
 activate_current() {
   local current temp target existing version
   current="$VIBE_MAC_RUNTIME_ROOT/current"
@@ -367,6 +423,7 @@ activate_current() {
     [ -d "$VIBE_MAC_RUNTIME_ROOT/$existing" ] &&
       [ ! -L "$VIBE_MAC_RUNTIME_ROOT/$existing" ] ||
       fail_integrity "существующий current dangling или небезопасен."
+    PREVIOUS_CURRENT_TARGET="$existing"
     VIBE_MAC_PREVIOUS_RELEASE_VERSION="$version"
     export VIBE_MAC_PREVIOUS_RELEASE_VERSION
   fi
@@ -379,15 +436,138 @@ activate_current() {
     /bin/unlink "$temp"
     fail_operation "injected failure before current swap."
   fi
-  /bin/mv -f "$temp" "$current"
+  replace_symlink_atomically "$temp" "$current"
+  [ "$(/usr/bin/readlink "$current" 2>/dev/null || true)" = "$target" ] ||
+    fail_integrity "current не переключился на ожидаемый release."
+  ACTIVE_CURRENT_TARGET="$target"
+}
+
+rollback_current() {
+  local current temp actual
+  current="$VIBE_MAC_RUNTIME_ROOT/current"
+  [ -n "$ACTIVE_CURRENT_TARGET" ] || return 0
+  [ -L "$current" ] || return 2
+  actual="$(/usr/bin/readlink "$current")" || return 2
+  [ "$actual" = "$ACTIVE_CURRENT_TARGET" ] || return 2
+
+  if [ -z "$PREVIOUS_CURRENT_TARGET" ]; then
+    /bin/unlink "$current"
+    ACTIVE_CURRENT_TARGET=
+    return 0
+  fi
+  [ -d "$VIBE_MAC_RUNTIME_ROOT/$PREVIOUS_CURRENT_TARGET" ] &&
+    [ ! -L "$VIBE_MAC_RUNTIME_ROOT/$PREVIOUS_CURRENT_TARGET" ] || return 2
+  temp="$VIBE_MAC_RUNTIME_ROOT/.current.rollback.vibe-mac.$$"
+  if [ -e "$temp" ] || [ -L "$temp" ]; then
+    return 2
+  fi
+  /bin/ln -s "$PREVIOUS_CURRENT_TARGET" "$temp"
+  replace_symlink_atomically "$temp" "$current"
+  [ "$(/usr/bin/readlink "$current" 2>/dev/null || true)" = "$PREVIOUS_CURRENT_TARGET" ] ||
+    return 2
+  ACTIVE_CURRENT_TARGET=
+}
+
+metadata_file_fingerprint() {
+  local target
+  target="$1"
+  if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+    printf '%s\n' absent
+    return 0
+  fi
+  if [ -f "$target" ] && [ ! -L "$target" ]; then
+    printf 'file:%s\n' "$(sha256_file_standalone "$target")"
+    return 0
+  fi
+  printf '%s\n' unsafe
+}
+
+snapshot_install_metadata() {
+  PREINSTALL_PROGRESS_FINGERPRINT="$(metadata_file_fingerprint \
+    "$VIBE_MAC_RUNTIME_ROOT/state/progress.json")" || return 2
+  PREINSTALL_MANIFEST_FINGERPRINT="$(metadata_file_fingerprint \
+    "$VIBE_MAC_RUNTIME_ROOT/state/manifest.json")" || return 2
+}
+
+install_metadata_changed() {
+  local progress manifest
+  progress="$(metadata_file_fingerprint \
+    "$VIBE_MAC_RUNTIME_ROOT/state/progress.json")" || return 0
+  manifest="$(metadata_file_fingerprint \
+    "$VIBE_MAC_RUNTIME_ROOT/state/manifest.json")" || return 0
+  [ "$progress" != "$PREINSTALL_PROGRESS_FINGERPRINT" ] ||
+    [ "$manifest" != "$PREINSTALL_MANIFEST_FINGERPRINT" ]
+}
+
+manifest_points_to_active_release() {
+  local file plutil_bin version path_kind path owned
+  local link_path_kind link_path link_target link_owned
+  file="$VIBE_MAC_RUNTIME_ROOT/state/manifest.json"
+  [ -f "$file" ] && [ ! -L "$file" ] || return 1
+  if [ "${VIBE_MAC_TEST_MODE:-0}" = 1 ]; then
+    plutil_bin="${VIBE_MAC_PLUTIL_BIN:?test plutil не задан}"
+  else
+    plutil_bin=/usr/bin/plutil
+  fi
+  [ -x "$plutil_bin" ] || return 1
+  "$plutil_bin" -convert json -o /dev/null -- \
+    "$file" >/dev/null 2>&1 || return 1
+  version="$("$plutil_bin" -extract releases.current.version \
+    raw -expect string -- "$file" 2>/dev/null)" || return 1
+  path_kind="$("$plutil_bin" -extract releases.current.path_kind \
+    raw -expect string -- "$file" 2>/dev/null)" || return 1
+  path="$("$plutil_bin" -extract releases.current.path \
+    raw -expect string -- "$file" 2>/dev/null)" || return 1
+  owned="$("$plutil_bin" -extract releases.current.owned \
+    raw -expect bool -- "$file" 2>/dev/null)" || return 1
+  link_path_kind="$("$plutil_bin" -extract current_link.path_kind \
+    raw -expect string -- "$file" 2>/dev/null)" || return 1
+  link_path="$("$plutil_bin" -extract current_link.path \
+    raw -expect string -- "$file" 2>/dev/null)" || return 1
+  link_target="$("$plutil_bin" -extract current_link.target \
+    raw -expect string -- "$file" 2>/dev/null)" || return 1
+  link_owned="$("$plutil_bin" -extract current_link.owned \
+    raw -expect bool -- "$file" 2>/dev/null)" || return 1
+  [ "$version" = "$RELEASE_VERSION" ] &&
+    [ "$path_kind" = runtime_relative ] &&
+    [ "$path" = "$ACTIVE_CURRENT_TARGET" ] &&
+    [ "$owned" = true ] &&
+    [ "$link_path_kind" = runtime_relative ] &&
+    [ "$link_path" = current ] &&
+    [ "$link_target" = "$ACTIVE_CURRENT_TARGET" ] &&
+    [ "$link_owned" = true ]
 }
 
 render_launcher() {
   local target
   target="$1"
-  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' '#!/bin/bash -p'
   printf '%s\n' 'set -euo pipefail'
-  printf '%s\n' 'root="$HOME/.vibe-mac"'
+  printf '%s\n' 'launcher_path="${BASH_SOURCE[0]}"'
+  printf '%s\n' 'case "$launcher_path" in'
+  printf '%s\n' '  /*) ;;'
+  printf '%s\n' '  */*)'
+  printf '%s\n' '    physical_cwd="$(builtin pwd -P)" || exit 2'
+  printf '%s\n' '    launcher_path="$physical_cwd/${launcher_path#./}"'
+  printf '%s\n' '    ;;'
+  printf '%s\n' '  *) exit 2 ;;'
+  printf '%s\n' 'esac'
+  printf '%s\n' '[ -f "$launcher_path" ] && [ ! -L "$launcher_path" ] || exit 2'
+  printf '%s\n' 'bin_path="${launcher_path%/*}"'
+  printf '%s\n' '[ "$bin_path" != "$launcher_path" ] || exit 2'
+  printf '%s\n' '[ -d "$bin_path" ] && [ ! -L "$bin_path" ] || exit 2'
+  printf '%s\n' 'lexical_root="${bin_path%/bin}"'
+  printf '%s\n' '[ "$bin_path" = "$lexical_root/bin" ] || exit 2'
+  printf '%s\n' 'case "$lexical_root" in /*/.vibe-mac) ;; *) exit 2 ;; esac'
+  printf '%s\n' '[ -d "$lexical_root" ] && [ ! -L "$lexical_root" ] || exit 2'
+  printf '%s\n' 'trusted_home="${lexical_root%/.vibe-mac}"'
+  printf '%s\n' '[ -d "$trusted_home" ] && [ ! -L "$trusted_home" ] || exit 2'
+  printf '%s\n' 'bin="$(builtin cd "$bin_path" && builtin pwd -P)" || exit 2'
+  printf '%s\n' 'root="${bin%/bin}"'
+  printf '%s\n' '[ "$bin" = "$root/bin" ] || exit 2'
+  printf '%s\n' 'case "$root" in /*/.vibe-mac) ;; *) exit 2 ;; esac'
+  printf '%s\n' '[ -d "$root" ] && [ ! -L "$root" ] || exit 2'
+  printf '%s\n' '[ -d "$root/releases" ] && [ ! -L "$root/releases" ] || exit 2'
   printf '%s\n' 'current="$root/current"'
   printf '%s\n' '[ -L "$current" ] || { printf "Ошибка: current небезопасен.\\n" >&2; exit 2; }'
   printf '%s\n' 'link="$(/usr/bin/readlink "$current")"'
@@ -403,7 +583,12 @@ render_launcher() {
   printf '%s\n' '  printf "Ошибка: установленный vibe-mac bundle повреждён.\\n" >&2'
   printf '%s\n' '  exit 2'
   printf '%s\n' '}'
-  printf '%s\n' 'exec /bin/bash "$target" "$@"'
+  printf '%s\n' 'run_user="$(/usr/bin/id -un)" || exit 2'
+  printf '%s\n' 'exec /usr/bin/env -i \
+  HOME="$trusted_home" USER="$run_user" LOGNAME="$run_user" SHELL=/bin/zsh \
+  PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp LC_ALL=C \
+  TERM=xterm-256color \
+  /bin/bash --noprofile --norc -p "$target" "$@"'
 }
 
 preflight_launcher() {
@@ -462,8 +647,8 @@ prepare_runtime_layout() {
 }
 
 DRY_RUN="${DRY_RUN:-0}"
+configure_bootstrap_build_channel
 validate_bool_standalone DRY_RUN "$DRY_RUN"
-validate_bool_standalone VIBE_MAC_TEST_MODE "${VIBE_MAC_TEST_MODE:-0}"
 
 if [ "$DRY_RUN" = 1 ]; then
   printf '%s\n' \
@@ -483,6 +668,7 @@ else
   VIBE_MAC_RUNTIME_ROOT="$HOME/.vibe-mac"
 fi
 export VIBE_MAC_RUNTIME_ROOT
+validate_runtime_root_standalone
 
 umask 077
 TEMP_DIR="$(/usr/bin/mktemp -d \
@@ -540,4 +726,45 @@ export VIBE_MAC_LAUNCHER_UNINSTALL_SHA256
 cleanup
 TEMP_DIR=
 trap - EXIT
-exec /bin/bash "$VIBE_MAC_RUNTIME_ROOT/current/install.sh"
+snapshot_install_metadata
+install_status=0
+if [ "${VIBE_MAC_TEST_MODE:-0}" = 1 ]; then
+  /bin/bash --noprofile --norc -p \
+    "$VIBE_MAC_RUNTIME_ROOT/current/install.sh" || install_status="$?"
+else
+  run_user="$(/usr/bin/id -un)" ||
+    fail_integrity "не удалось определить пользователя."
+  /usr/bin/env -i \
+    HOME="$HOME" USER="$run_user" LOGNAME="$run_user" SHELL=/bin/zsh \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp LC_ALL=C \
+    TERM=xterm-256color \
+    DRY_RUN=0 EXTRAS="${EXTRAS:-0}" \
+    SKIP_DEFAULTS="${SKIP_DEFAULTS:-0}" \
+    ALLOW_UNSUPPORTED_INTEL="${ALLOW_UNSUPPORTED_INTEL:-0}" \
+    VIBE_MAC_RELEASE_VERSION="$VIBE_MAC_RELEASE_VERSION" \
+    VIBE_MAC_RELEASE_ARCHIVE_SHA256="$VIBE_MAC_RELEASE_ARCHIVE_SHA256" \
+    VIBE_MAC_RELEASE_TREE_SHA256="$VIBE_MAC_RELEASE_TREE_SHA256" \
+    VIBE_MAC_LAUNCHER_VERIFY_SHA256="$VIBE_MAC_LAUNCHER_VERIFY_SHA256" \
+    VIBE_MAC_LAUNCHER_DOCTOR_SHA256="$VIBE_MAC_LAUNCHER_DOCTOR_SHA256" \
+    VIBE_MAC_LAUNCHER_UNINSTALL_SHA256="$VIBE_MAC_LAUNCHER_UNINSTALL_SHA256" \
+    /bin/bash --noprofile --norc -p \
+      "$VIBE_MAC_RUNTIME_ROOT/current/install.sh" || install_status="$?"
+fi
+if [ "$install_status" -eq 0 ]; then
+  exit 0
+fi
+if manifest_points_to_active_release; then
+  printf 'Внимание: install завершился с кодом %s после сохранения прогресса; current оставлен на версии %s для безопасного продолжения.\n' \
+    "$install_status" "$RELEASE_VERSION" >&2
+  exit "$install_status"
+fi
+if install_metadata_changed; then
+  printf '%s\n' \
+    'Внимание: частичные metadata не подтверждают новый active release;' \
+    'current будет возвращён к предыдущему состоянию.' >&2
+fi
+if ! rollback_current; then
+  fail_integrity "install завершился ошибкой, а current нельзя безопасно откатить."
+fi
+printf 'Внимание: install завершился с кодом %s; current возвращён назад.\n' "$install_status" >&2
+exit "$install_status"

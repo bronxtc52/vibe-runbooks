@@ -78,7 +78,7 @@ setup() {
   assert_file_contains "$VIBE_MAC_DEFAULTS_STATE" "NSGlobalDomain:AppleShowAllExtensions=1"
 
   run "$VIBE_MAC_PLUTIL_BIN" \
-    -extract defaults.dock_autohide raw -- "$VIBE_MAC_MANIFEST_FILE"
+    -extract defaults.dock_autohide json -o - -- "$VIBE_MAC_MANIFEST_FILE"
   [ "$status" -eq 0 ]
   [[ "$output" == *'"original_value":false'* ]]
   [[ "$output" == *'"applied_value":true'* ]]

@@ -34,7 +34,19 @@ Ventura нельзя. Intel остаётся отдельным unsupported opt-
 `Brewfile` не является lockfile. Для уже установленных **прямых** formula/cask
 инсталлятор гарантирует отсутствие явного `upgrade`, `reinstall`, `relink`,
 `cleanup` и `zap`. Он передаёт `--no-upgrade` и защитные переменные Homebrew,
-пропускает внешние эквивалентные установки и сравнивает снимки до/после.
+пропускает только доказанные эквивалентные установки и сравнивает снимки
+до/после.
+
+Защитное уточнение, принятое при реализации: наличие одноимённого CLI только в
+`PATH` не доказывает происхождение пакета и не является причиной для skip.
+Прямая formula/cask считается preexisting по receipt Homebrew; обязательный CLI
+дополнительно должен находиться в точном expected Homebrew-prefix. Внешний
+эквивалент разрешён только как реальный, не являющийся symlink GUI-бандл по
+точному allowlisted пути в `/Applications` либо подходящий реальный Nerd Font
+непосредственно в `~/Library/Fonts`. Это уточнение намеренно заменяет более
+широкое правило исходного управляющего промпта о любом рабочем CLI в `PATH`:
+иначе PATH hijack может выполнить произвольный код во время install/verify/
+uninstall.
 
 Однако Homebrew может обновить уже существующую **транзитивную зависимость**,
 если без этого нельзя установить новый обязательный пакет. Скрыть или обещать
@@ -90,11 +102,17 @@ vibe-mac-doctor -----+-> те же detect/verify-функции и manifest
 vibe-mac-uninstall --/
 ```
 
+В packaged release каждый operational entrypoint до первого `source` сверяет
+build marker, active `current`, exact root markers и fingerprint всего release
+tree. Test seams существуют только в source checkout; `git archive` подставляет
+exact commit и навсегда выключает их в release.
+
 ### 2.1 Режимы запуска
 
 - **Checkout:** `/bin/bash ./install.sh` использует файлы текущего checkout.
-- **Installed bundle:** `~/.vibe-mac/current/install.sh` продолжает или
-  перепроверяет установку.
+- **Installed bundle:** повторный запуск той же versioned bootstrap-команды из
+  README безопасно продолжает или перепроверяет установку; внутренний
+  `current/install.sh` не является пользовательской точкой входа.
 - **Bootstrap:** устанавливает только проверенный versioned bundle и передаёт
   управление его `install.sh`.
 - **DRY_RUN:** `DRY_RUN=1` проходит только локальные read-only detect/plan.
@@ -431,9 +449,13 @@ brew bundle install --file="$VIBE_MAC_ROOT/Brewfile" --no-upgrade
 
 Skip-листы строятся только из проверенных имён:
 
-- уже установленная formula/cask Homebrew;
-- точное GUI-приложение в `/Applications`, установленное не Homebrew;
-- рабочий внешний CLI с распознаваемой версией и корректной архитектурой.
+- formula/cask с подтверждённым receipt Homebrew;
+- точное, не являющееся symlink GUI-приложение в `/Applications`;
+- подходящий реальный файл Nerd Font непосредственно в `~/Library/Fonts`.
+
+CLI только в `PATH` не попадает в skip-list. Обязательный CLI проверяется по
+исполняемому файлу в `$expected_prefix/bin/<name>`, а обычная apply/verify
+готовность дополнительно требует receipt Homebrew.
 
 Снимки `brew list --formula --versions` и `brew list --cask --versions`
 снимаются до/после. Прямая preexisting-позиция, изменившая версию, делает
@@ -567,6 +589,11 @@ VIBE_MAC_SHA256='<BOOTSTRAP_SHA256>' /bin/bash -c '<versioned loader generated a
 `vibe-mac-verify`. Launchers являются маленькими статическими файлами с
 allowlisted target `~/.vibe-mac/current/...`.
 
+Если новый `install.sh` падает до записи release linkage в typed manifest,
+`current` атомарно возвращается назад. Если manifest уже доказанно указывает на
+новый release/current, новая версия остаётся active для безопасного resume;
+одного изменения `progress.json` для этого недостаточно.
+
 Uninstall сначала копирует свой минимальный runtime в exact temp, сверяет его
 SHA, и лишь затем может удалить launchers/current/release. State, логи и
 `~/.vibe-mac-backup` по умолчанию сохраняются для восстановления; их ручная
@@ -657,7 +684,8 @@ Enter → `xcode-select --install` → числовой poll `N/TOTAL` → по�
 
 ### `30-brew-bundle`
 
-**Detect:** exact Homebrew receipts, внешние GUI paths/CLI versions, snapshots.
+**Detect:** exact Homebrew receipts, точные внешние GUI/Nerd Font paths,
+обязательные CLI в expected Homebrew-prefix, snapshots.
 
 **Apply:** основной `Brewfile` и при `EXTRAS=1` extras с контрактом раздела 5.
 После каждого bundle — независимый check каждого обязательного компонента,
@@ -705,10 +733,17 @@ mise -C "$HOME/dev/hello-vibe" exec -- python --version
 uv --version
 ```
 
-Так как workspace создаётся на шаге `90`, шаг `50` сначала проверяет versions
-через временный **read-only config path внутри bundle**, а финальный verifier —
-через workspace. Temp для runtime install создаёт сам mise в своих штатных
-каталогах только в real run.
+Так как workspace создаётся на шаге `90`, шаг `50` сначала проверяет explicit
+versions в config-isolated режиме, а финальный verifier — через workspace.
+Temp для runtime install создаёт сам mise в своих штатных каталогах только в
+real run.
+
+Все команды `mise` получают минимальное окружение, exact Homebrew binary и
+явный режим без пользовательских/system config, env и hooks. Единственное
+исключение — `mise use --global`: после проверки отсутствующего target ему
+передаётся ровно `~/.config/mise/config.toml` как разрешённый файл записи.
+Неявная установка при `where`/`exec` запрещена (`MISE_AUTO_INSTALL=0`,
+`MISE_EXEC_AUTO_INSTALL=0`); detect/verify дополнительно работают offline.
 
 ### `60-ai-agents`
 
@@ -717,9 +752,13 @@ uv --version
 ```bash
 claude --version
 codex --version
-cursor --version
 cursor-agent --version
 ```
+
+Cursor Desktop проверяется как exact structural app bundle. Вспомогательный
+`cursor`-symlink cask намеренно не исполняется: стандартная ссылка ведёт внутрь
+`/Applications/Cursor.app`, то есть за доверенный Homebrew prefix. Для
+терминального агента используется отдельный trusted `cursor-agent`.
 
 Интерактивно, по одному: объяснение аккаунта → Enter → официальный вход →
 status. Raw output статуса в лог не записывается.
@@ -734,7 +773,8 @@ cursor-agent status
 ```
 
 Cursor Desktop login остаётся ручным GUI-пунктом: документированной terminal
-auth status нет. `open -a Cursor` выполняется только после отдельного Enter.
+auth status нет. `open /Applications/Cursor.app` выполняется только после
+отдельного Enter; поиск одноимённого приложения через LaunchServices запрещён.
 Отложенный login не делает установленный binary красным.
 
 ### `70-git-github`
@@ -750,7 +790,8 @@ git config --global push.autoSetupRemote true
 
 - `user.name`/`user.email` запросить у пользователя или позволить отложить;
   не угадывать, не логировать, не перезаписывать.
-- GitHub: объяснение → Enter → `gh auth login --web --git-protocol https` →
+- GitHub: объяснение → Enter →
+  `gh auth login --hostname github.com --web --git-protocol https` →
   подавленная `gh auth status`.
 - Не создавать remote/repository, не commit/push/publish.
 
@@ -779,6 +820,7 @@ defaults write NSGlobalDomain AppleShowAllExtensions -bool true
 - `git init -b feat/first-page`;
 - не создавать commit, remote, push или deploy;
 - первый промпт разрешает Claude менять только `index.html` и не публиковать;
+- напечатать готовый первый промпт и точную команду запуска Claude;
 - после явного Enter — `open index.html`.
 
 Доктрина проекта содержит запреты на секреты/PII/PHI, правило Azure Key Vault
@@ -804,19 +846,18 @@ Read-only агрегаты и основные probes:
 | 8 | Node | project-context exact `v24.18.1` |
 | 9 | Python | project-context exact `Python 3.12.13` |
 | 10 | uv | команда и parseable version |
-| 11 | AI | четыре binaries + Cursor.app; auth отдельно |
+| 11 | AI | Claude/Codex/Cursor Agent + Cursor.app; auth отдельно |
 | 12 | Workspace | exact files, Git repo, doctrine, no remote |
 
-Каждый красный агрегат содержит ровно одну команду:
-
-```bash
-/bin/bash "$HOME/.vibe-mac/current/install.sh"
-```
-
-Если bundle отсутствует/повреждён, это exit `2` и README versioned bootstrap
-hint, а не фиктивная repair-команда. Внизу: `N из 12 готово`, фактические
-версии и отдельные auth статусы GitHub/Claude/Codex/Cursor Agent/ручной Cursor
-Desktop. Exit `0/1/2` строго соответствует ТЗ.
+Каждый красный агрегат содержит ровно одну безопасную рекомендацию: открыть
+README и повторить versioned bootstrap-команду для нужной версии. До отдельного
+release-гейта exact production one-liner остаётся placeholder; прямой запуск
+внутреннего `current/install.sh` не предлагается. Если bundle
+отсутствует/повреждён, это exit `2` с тем же versioned bootstrap hint, а не
+фиктивная repair-команда. Внизу: `N из 12 готово`, фактические
+версии и отдельные offline auth-статусы GitHub/Claude/Codex/Cursor Agent/
+ручной Cursor Desktop с точными ручными командами. Default verify никогда не
+запускает auth CLI и не обращается к сети. Exit `0/1/2` строго соответствует ТЗ.
 
 ### 10.2 `doctor.sh`
 
@@ -845,6 +886,9 @@ Desktop. Exit `0/1/2` строго соответствует ТЗ.
   logs и backups не удаляются;
 - owned Brew packages удаляются обычным uninstall без `zap` только если receipt
   и ownership всё ещё совпадают и нет installed dependents;
+- owned Node/Python удаляются exact-командой `mise uninstall` до formula
+  `mise`; preexisting, drift или любой оставшийся пользовательский runtime
+  сохраняет и runtime, и `mise`;
 - managed block удаляется только при совпадении его hash; пользовательский
   конфликт остаётся;
 - owned OMZ/config удаляется только при неизменном applied hash;
@@ -862,6 +906,9 @@ state/log/backups, если пользователь действительно 
 - Никакого `set -x`.
 - `sudo`, `gh auth`, `claude auth`, `codex login`,
   `cursor-agent login/status` выполняются вне stdout/stderr capture.
+- Homebrew, mise, Git/GitHub и AI auth запускаются через минимальное
+  allowlisted environment; endpoint, remote, browser, config и worktree
+  overrides из вызывающей оболочки не наследуются.
 - Canary password/token/OAuth output в тестах не должен появляться ни в
   success-, ни в error-log.
 - Installer не читает `~/.ssh`, `~/.aws`, `~/.azure`, `~/.kube`,
@@ -898,9 +945,10 @@ state/log/backups, если пользователь действительно 
    отсутствие новых mutating/network events во втором run.
 4. **DRY_RUN:** zero-write/network/sudo/GUI/auth/temp/log/lock. Сначала
    malicious fixture доказывает, что tripwire действительно краснеет.
-5. **Preexisting:** formula/cask, external apps/CLI, Git/mise globals, zsh/
-   Ghostty/Starship configs и global agent files не меняются; dependency-delta
-   корректно классифицируется отдельно.
+5. **Preexisting:** formula/cask с receipt, точные внешние GUI-приложения/Nerd
+   Font, Git/mise globals, zsh/Ghostty/Starship configs и global agent files не
+   меняются; PATH-only CLI отвергается, dependency-delta корректно
+   классифицируется отдельно.
 6. **Bootstrap:** wrong checksum, truncated archive, absolute/`..` entry,
    symlink/hardlink, wrong top directory, existing mismatched release,
    symlink escape, failure cleanup.
@@ -1000,10 +1048,10 @@ CI:
 
 ### Gate 3 — независимое ревью и PR
 
-- [ ] `git fetch origin` и повторная синхронизация с актуальным `origin/main`.
+- [x] `git fetch origin` и повторная синхронизация с актуальным `origin/main`.
 - [ ] Проверить каждый упавший тест на чистом `origin/main` до объявления
   регрессией.
-- [ ] Независимый read-only reviewer: blocker/high = 0.
+- [x] Независимый read-only reviewer: blocker/high = 0.
 - [ ] `scripts/check.sh`, полный Bats, idempotency, diff secret scan на final SHA.
 - [ ] Проверить `git status` и `git branch -vv`.
 - [ ] Push только `codex/vibe-mac-refactor` и открыть PR; не merge.

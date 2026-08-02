@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STEP_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-VIBE_MAC_ROOT="${VIBE_MAC_ROOT:-$(cd "$STEP_DIR/.." && pwd -P)}"
+STEP_PATH="$(/bin/realpath "$0" 2>/dev/null)" || exit 2
+STEP_DIR="${STEP_PATH%/*}"
+VIBE_MAC_ROOT="${STEP_DIR%/*}"
 export VIBE_MAC_ROOT
 
 # shellcheck source=config/versions.env
