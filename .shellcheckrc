@@ -1,5 +1,6 @@
-# Скрипты подключают общую библиотеку через переменный путь:
-#   source "$SCRIPT_DIR/../scripts/lib.sh"
-# shellcheck не может статически разрешить путь и выдаёт SC1091 (info) —
-# это ложное срабатывание, а не дефект. Глушим репозиторно.
+shell=bash
+source-path=SCRIPTDIR
+
+# Источники подключаются через проверенный VIBE_MAC_ROOT, поэтому ShellCheck
+# не может статически разрешить часть dynamic source paths.
 disable=SC1091

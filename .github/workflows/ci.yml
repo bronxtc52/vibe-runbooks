@@ -6,43 +6,39 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  lint:
-    name: shellcheck + bash -n
+  linux:
+    name: Full sandbox suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
-      - name: bash -n (синтаксис всех скриптов)
+      - name: Checkout exact action commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install test tools
         run: |
-          fail=0
-          while IFS= read -r -d '' f; do
-            bash -n "$f" || fail=1
-          done < <(find . -path ./.git -prune -o -name '*.sh' -print0)
-          exit $fail
-      - name: shellcheck
-        run: |
-          fail=0
-          while IFS= read -r -d '' f; do
-            shellcheck "$f" || fail=1
-          done < <(find . -path ./.git -prune -o -name '*.sh' -print0)
-          exit $fail
+          sudo apt-get update
+          sudo apt-get install -y bats shellcheck python3 ripgrep
+      - name: Run all checks
+        run: ./scripts/check.sh
 
-  test:
-    name: bats unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install bats-core
-        run: sudo apt-get update && sudo apt-get install -y bats
-      - name: Run bats
-        run: bats tests/
-
-  smoke:
-    name: smoke check-system (macOS)
+  macos:
+    name: macOS 14 arm64 read-only smoke
     runs-on: macos-14
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - name: Run read-only system check
-        run: bash 00-preflight/check-system.sh
+      - name: Checkout exact action commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Assert supported runner
+        run: |
+          test "$(uname -m)" = arm64
+          /bin/bash --version
+          sw_vers -productVersion
+      - name: Syntax and zero-write smoke
+        run: ./scripts/check.sh --smoke-only

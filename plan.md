@@ -992,11 +992,11 @@ CI:
 
 ### Layer 5 — миграция, docs, CI
 
-- [ ] Удалить exact legacy map из раздела 4.4.
-- [ ] Переписать `AGENTS.md`, README и troubleshooting.
-- [ ] Добавить CI/policy checks и подтвердить отсутствие forbidden stack.
-- [ ] Выполнить полный suite дважды на одном commit SHA.
-- [ ] Маленький атомарный commit после secret scan.
+- [x] Удалить exact legacy map из раздела 4.4.
+- [x] Переписать `AGENTS.md`, README и troubleshooting.
+- [x] Добавить CI/policy checks и подтвердить отсутствие forbidden stack.
+- [x] Выполнить полный suite дважды на одном commit SHA.
+- [x] Маленький атомарный commit после secret scan.
 
 ### Gate 3 — независимое ревью и PR
 
