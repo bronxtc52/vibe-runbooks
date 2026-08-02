@@ -42,6 +42,18 @@ set_git_default_if_missing() {
   fi
   backup_git_config
   git config --global "$key" "$value"
+  [ -f "$VIBE_MAC_MANIFEST_FILE" ] || return 0
+  case "$key" in
+    init.defaultBranch)
+      manifest_record_git_default init-default-branch "$key" "$value"
+      ;;
+    pull.rebase)
+      manifest_record_git_default pull-rebase "$key" "$value"
+      ;;
+    push.autoSetupRemote)
+      manifest_record_git_default push-auto-upstream "$key" "$value"
+      ;;
+  esac
 }
 
 maybe_set_identity() {

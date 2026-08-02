@@ -55,3 +55,24 @@ setup() {
   [ "$before" = "$after" ]
   ! grep -F "mise:use --global" "$VIBE_MAC_EVENT_LOG"
 }
+
+@test "runtime step фиксирует ownership и созданный mise global config" {
+  /bin/bash -c '
+    source "$PROJECT_ROOT/config/versions.env"
+    source "$PROJECT_ROOT/lib/util.sh"
+    manifest_init "$PROJECT_ROOT/state/manifest-template.json" "$VIBE_MAC_MANIFEST_FILE"
+  '
+
+  run /bin/bash "$PROJECT_ROOT/steps/50-runtimes.sh" apply
+  [ "$status" -eq 0 ]
+
+  run "$VIBE_MAC_PLUTIL_BIN" -extract runtimes.node raw -- "$VIBE_MAC_MANIFEST_FILE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"version":"24.18.1"'* ]]
+  [[ "$output" == *'"owned":true'* ]]
+  run "$VIBE_MAC_PLUTIL_BIN" \
+    -extract files.mise-global raw -- "$VIBE_MAC_MANIFEST_FILE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"path":".config/mise/config.toml"'* ]]
+  [[ "$output" == *'"owned":true'* ]]
+}

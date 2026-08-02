@@ -72,3 +72,27 @@ setup() {
   [ "$before" = "$after" ]
   assert_path_absent "$HOME/.zshrc"
 }
+
+@test "shell step записывает typed ownership и hashes в manifest" {
+  /bin/bash -c '
+    source "$PROJECT_ROOT/config/versions.env"
+    source "$PROJECT_ROOT/lib/util.sh"
+    manifest_init "$PROJECT_ROOT/state/manifest-template.json" "$VIBE_MAC_MANIFEST_FILE"
+  '
+
+  run /bin/bash "$PROJECT_ROOT/steps/40-shell.sh" apply
+  [ "$status" -eq 0 ]
+
+  for key in files.zprofile files.zshrc files.ghostty files.aliases files.starship; do
+    run "$VIBE_MAC_PLUTIL_BIN" -extract "$key" raw -- "$VIBE_MAC_MANIFEST_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'"owned":true'* ]]
+    [[ "$output" == *'"applied_sha":"'* ]]
+    [[ "$output" == *'"backup":{'* ]]
+  done
+  run "$VIBE_MAC_PLUTIL_BIN" \
+    -extract components.oh_my_zsh raw -- "$VIBE_MAC_MANIFEST_FILE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"owned":true'* ]]
+  [[ "$output" == *'"tree_sha256":"'* ]]
+}

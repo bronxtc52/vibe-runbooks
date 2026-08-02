@@ -153,6 +153,13 @@ run_install() {
 
   state_init "$STATE_TEMPLATE" "$VIBE_MAC_STATE_FILE"
   manifest_init "$MANIFEST_TEMPLATE" "$VIBE_MAC_MANIFEST_FILE"
+  if [ -z "$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" platform.architecture 2>/dev/null || true)" ]; then
+    manifest_record_platform \
+      "$(guard_architecture)" \
+      "$(guard_macos_version)"
+  fi
+  manifest_record_release_from_env
   init_log
   log_event info bootstrap "Начат vibe-mac $VIBE_MAC_VERSION."
 

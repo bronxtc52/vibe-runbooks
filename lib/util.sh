@@ -87,11 +87,34 @@ sha256_file() {
   fi
 }
 
+sha256_stdin() {
+  if [ -x /usr/bin/shasum ]; then
+    /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}'
+  elif have sha256sum; then
+    sha256sum | awk '{print $1}'
+  else
+    printf 'Ошибка: не найден SHA-256 инструмент.\n' >&2
+    return 2
+  fi
+}
+
+sha256_text() {
+  printf '%s\n' "$1" | sha256_stdin
+}
+
+validate_sha256_or_empty() {
+  case "$1" in
+    "") return 0 ;;
+    *[!A-Fa-f0-9]*) return 2 ;;
+  esac
+  [ "${#1}" -eq 64 ]
+}
+
 validate_home_relative() {
   local path
   path="$1"
   case "$path" in
-    ""|/*|*\\*|*$'\n'*|*$'\r'*)
+    ""|/*|*\\*|*\"*|*$'\n'*|*$'\r'*|*$'\t'*)
       printf 'Ошибка: небезопасный относительный путь.\n' >&2
       return 2
       ;;
@@ -294,6 +317,301 @@ manifest_record_dependency_delta() {
     "$VIBE_MAC_MANIFEST_FILE" \
     packages.dependency_delta \
     "$1"
+}
+
+manifest_record_file() {
+  local id relative kind block_id preexisting owned applied_sha backup_logical
+  local backup_dir backup_path backup_kind backup_sha backup_relative
+  local json
+  id="$1"
+  relative="$2"
+  kind="$3"
+  block_id="$4"
+  preexisting="$5"
+  owned="$6"
+  applied_sha="$7"
+  backup_logical="$8"
+  validate_logical_id "$id"
+  validate_home_relative "$relative"
+  case "$kind" in managed_block|owned_file) ;; *) return 2 ;; esac
+  case "$preexisting:$owned" in
+    true:true|true:false|false:true|false:false) ;;
+    *) return 2 ;;
+  esac
+  if [ "$kind" = managed_block ]; then
+    validate_logical_id "$block_id"
+  elif [ -n "$block_id" ]; then
+    return 2
+  fi
+  validate_sha256_or_empty "$applied_sha" || return 2
+  validate_logical_id "$backup_logical"
+
+  backup_dir="$VIBE_MAC_BACKUP_ROOT/${VIBE_MAC_INSTALL_ID:?install ID не задан}"
+  if [ -f "$backup_dir/$backup_logical.before" ] &&
+    [ ! -L "$backup_dir/$backup_logical.before" ]; then
+    backup_path="$backup_dir/$backup_logical.before"
+    backup_kind="file"
+  elif [ -f "$backup_dir/$backup_logical.absent" ] &&
+    [ ! -L "$backup_dir/$backup_logical.absent" ]; then
+    backup_path="$backup_dir/$backup_logical.absent"
+    backup_kind="absent"
+  else
+    printf 'Ошибка: backup evidence для %s отсутствует.\n' "$id" >&2
+    return 2
+  fi
+  backup_relative="${backup_path#"$HOME"/}"
+  [ "$backup_relative" != "$backup_path" ] || return 2
+  validate_home_relative "$backup_relative"
+  backup_sha="$(sha256_file "$backup_path")"
+  validate_sha256_or_empty "$backup_sha" || return 2
+
+  json="{\"path_kind\":\"home_relative\",\"path\":\"$relative\",\"kind\":\"$kind\",\"block_id\":\"$block_id\",\"preexisting\":$preexisting,\"owned\":$owned,\"applied_sha\":\"$applied_sha\",\"backup\":{\"path_kind\":\"home_relative\",\"path\":\"$backup_relative\",\"kind\":\"$backup_kind\",\"sha256\":\"$backup_sha\"}}"
+  json_set_json_atomic "$VIBE_MAC_MANIFEST_FILE" "files.$id" "$json"
+}
+
+validate_home_target_ancestors() {
+  local relative current remaining segment
+  relative="$1"
+  validate_home_relative "$relative"
+  current="$HOME"
+  remaining="$relative"
+  while :; do
+    case "$remaining" in
+      */*)
+        segment="${remaining%%/*}"
+        remaining="${remaining#*/}"
+        current="$current/$segment"
+        if [ -L "$current" ] ||
+          { [ -e "$current" ] && [ ! -d "$current" ]; }; then
+          return 2
+        fi
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+}
+
+manifest_validate_file_entry() {
+  local id expected_relative expected_kind expected_block backup_logical
+  local path_kind relative kind block_id preexisting owned applied_sha
+  local backup_path_kind backup_relative backup_kind backup_sha
+  local install_id expected_before expected_absent backup_target actual_sha
+  id="$1"
+  expected_relative="$2"
+  expected_kind="$3"
+  expected_block="$4"
+  backup_logical="$5"
+  if ! json_extract_raw "$VIBE_MAC_MANIFEST_FILE" "files.$id" \
+    >/dev/null 2>&1; then
+    return 0
+  fi
+  path_kind="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.path_kind")" || return 2
+  relative="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.path")" || return 2
+  kind="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.kind")" || return 2
+  block_id="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.block_id")" || return 2
+  preexisting="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.preexisting")" || return 2
+  owned="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.owned")" || return 2
+  applied_sha="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.applied_sha")" || return 2
+  [ "$path_kind" = home_relative ] || return 2
+  [ "$relative" = "$expected_relative" ] || return 2
+  validate_home_relative "$relative" || return 2
+  validate_home_target_ancestors "$relative" || return 2
+  [ "$kind" = "$expected_kind" ] || return 2
+  [ "$block_id" = "$expected_block" ] || return 2
+  case "$preexisting:$owned" in
+    true:true|true:false|false:true|false:false) ;;
+    *) return 2 ;;
+  esac
+  validate_sha256_or_empty "$applied_sha" && [ -n "$applied_sha" ] ||
+    return 2
+
+  backup_path_kind="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.backup.path_kind")" || return 2
+  backup_relative="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.backup.path")" || return 2
+  backup_kind="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.backup.kind")" || return 2
+  backup_sha="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" "files.$id.backup.sha256")" || return 2
+  [ "$backup_path_kind" = home_relative ] || return 2
+  validate_home_relative "$backup_relative" || return 2
+  validate_home_target_ancestors "$backup_relative" || return 2
+  install_id="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" install_id)" || return 2
+  validate_logical_id "$install_id" || return 2
+  validate_logical_id "$backup_logical" || return 2
+  expected_before=".vibe-mac-backup/$install_id/$backup_logical.before"
+  expected_absent=".vibe-mac-backup/$install_id/$backup_logical.absent"
+  case "$backup_kind:$backup_relative" in
+    "file:$expected_before"|"absent:$expected_absent") ;;
+    *) return 2 ;;
+  esac
+  validate_sha256_or_empty "$backup_sha" && [ -n "$backup_sha" ] ||
+    return 2
+  backup_target="$HOME/$backup_relative"
+  [ -f "$backup_target" ] && [ ! -L "$backup_target" ] || return 2
+  actual_sha="$(sha256_file "$backup_target")" || return 2
+  [ "$actual_sha" = "$backup_sha" ]
+}
+
+manifest_record_runtime() {
+  local name version preexisting owned json
+  name="$1"
+  version="$2"
+  preexisting="$3"
+  owned="$4"
+  case "$name" in node|python) ;; *) return 2 ;; esac
+  case "$preexisting:$owned" in
+    true:true|true:false|false:true|false:false) ;;
+    *) return 2 ;;
+  esac
+  if ! printf '%s' "$version" |
+    LC_ALL=C /usr/bin/grep -Eq '^[A-Za-z0-9._+-]+$'; then
+    return 2
+  fi
+  json="{\"version\":\"$version\",\"preexisting\":$preexisting,\"owned\":$owned}"
+  json_set_json_atomic "$VIBE_MAC_MANIFEST_FILE" "runtimes.$name" "$json"
+}
+
+manifest_record_git_default() {
+  local id key value json
+  id="$1"
+  key="$2"
+  value="$3"
+  validate_logical_id "$id"
+  case "$id:$key:$value" in
+    init-default-branch:init.defaultBranch:main|\
+    pull-rebase:pull.rebase:true|\
+    push-auto-upstream:push.autoSetupRemote:true)
+      ;;
+    *) return 2 ;;
+  esac
+  json="{\"key\":\"$key\",\"created\":true,\"applied_value\":\"$value\"}"
+  json_set_json_atomic "$VIBE_MAC_MANIFEST_FILE" "git_defaults.$id" "$json"
+}
+
+manifest_record_platform() {
+  local architecture macos_version json
+  architecture="$1"
+  macos_version="$2"
+  case "$architecture" in arm64|x86_64) ;; *) return 2 ;; esac
+  if ! printf '%s' "$macos_version" |
+    LC_ALL=C /usr/bin/grep -Eq '^[0-9]+(\.[0-9]+){1,2}$'; then
+    return 2
+  fi
+  json="{\"architecture\":\"$architecture\",\"macos_version\":\"$macos_version\"}"
+  json_set_json_atomic "$VIBE_MAC_MANIFEST_FILE" platform "$json"
+}
+
+manifest_record_release_from_env() {
+  local version archive_sha tree_sha expected_root current_target
+  local previous_version previous_json current_json link_json
+  local launcher_id env_name launcher_sha launcher_json
+  version="${VIBE_MAC_RELEASE_VERSION:-}"
+  [ -n "$version" ] || return 0
+  archive_sha="${VIBE_MAC_RELEASE_ARCHIVE_SHA256:-}"
+  tree_sha="${VIBE_MAC_RELEASE_TREE_SHA256:-}"
+  case "$version" in
+    [A-Za-z0-9]*)
+      case "$version" in *[!A-Za-z0-9._-]*|*..*) return 2 ;; esac
+      ;;
+    *) return 2 ;;
+  esac
+  validate_sha256_or_empty "$archive_sha" && [ -n "$archive_sha" ] || return 2
+  validate_sha256_or_empty "$tree_sha" && [ -n "$tree_sha" ] || return 2
+  expected_root="$VIBE_MAC_RUNTIME_ROOT/releases/$version"
+  [ "$VIBE_MAC_ROOT" = "$expected_root" ] || return 2
+  [ -L "$VIBE_MAC_RUNTIME_ROOT/current" ] || return 2
+  current_target="$(/usr/bin/readlink "$VIBE_MAC_RUNTIME_ROOT/current")" ||
+    return 2
+  [ "$current_target" = "releases/$version" ] || return 2
+
+  previous_version="$(json_extract_raw \
+    "$VIBE_MAC_MANIFEST_FILE" releases.current.version 2>/dev/null || true)"
+  if [ -n "$previous_version" ] && [ "$previous_version" != "$version" ]; then
+    previous_json="$(json_extract_raw \
+      "$VIBE_MAC_MANIFEST_FILE" releases.current 2>/dev/null)" || return 2
+    json_set_json_atomic \
+      "$VIBE_MAC_MANIFEST_FILE" releases.previous "$previous_json"
+  fi
+  current_json="{\"version\":\"$version\",\"path_kind\":\"runtime_relative\",\"path\":\"releases/$version\",\"archive_sha256\":\"$archive_sha\",\"tree_sha256\":\"$tree_sha\",\"owned\":true}"
+  link_json="{\"path_kind\":\"runtime_relative\",\"path\":\"current\",\"target\":\"releases/$version\",\"owned\":true}"
+  json_set_json_atomic \
+    "$VIBE_MAC_MANIFEST_FILE" releases.current "$current_json"
+  json_set_json_atomic \
+    "$VIBE_MAC_MANIFEST_FILE" current_link "$link_json"
+
+  for launcher_id in verify doctor uninstall; do
+    case "$launcher_id" in
+      verify) env_name="${VIBE_MAC_LAUNCHER_VERIFY_SHA256:-}" ;;
+      doctor) env_name="${VIBE_MAC_LAUNCHER_DOCTOR_SHA256:-}" ;;
+      uninstall) env_name="${VIBE_MAC_LAUNCHER_UNINSTALL_SHA256:-}" ;;
+    esac
+    launcher_sha="$env_name"
+    validate_sha256_or_empty "$launcher_sha" &&
+      [ -n "$launcher_sha" ] || return 2
+    launcher_json="{\"path_kind\":\"runtime_relative\",\"path\":\"bin/vibe-mac-$launcher_id\",\"sha256\":\"$launcher_sha\",\"owned\":true}"
+    json_set_json_atomic \
+      "$VIBE_MAC_MANIFEST_FILE" "launchers.$launcher_id" "$launcher_json"
+  done
+}
+
+tree_sha256() {
+  local root
+  root="$1"
+  [ -d "$root" ] && [ ! -L "$root" ] || return 2
+  (
+    cd "$root"
+    /usr/bin/find . -mindepth 1 -print | LC_ALL=C /usr/bin/sort |
+      while IFS= read -r path; do
+        case "$path" in *$'\n'*|*$'\r'*) exit 2 ;; esac
+        if [ -L "$path" ]; then
+          exit 2
+        elif [ -f "$path" ]; then
+          printf 'F\t%s\t%s\t%s\n' \
+            "$(file_mode "$path")" "$(sha256_file "$path")" "$path"
+        elif [ -d "$path" ]; then
+          printf 'D\t%s\t-\t%s\n' "$(file_mode "$path")" "$path"
+        else
+          exit 2
+        fi
+      done
+  ) | sha256_stdin
+}
+
+release_tree_sha256() {
+  local root
+  root="$1"
+  [ -d "$root" ] && [ ! -L "$root" ] || return 2
+  (
+    cd "$root"
+    /usr/bin/find . -mindepth 1 \
+      ! -name .bundle-sha256 \
+      ! -name .bundle-tree-sha256 \
+      -print | LC_ALL=C /usr/bin/sort |
+      while IFS= read -r path; do
+        case "$path" in *$'\n'*|*$'\r'*) exit 2 ;; esac
+        if [ -L "$path" ]; then
+          exit 2
+        elif [ -f "$path" ]; then
+          printf 'F\t%s\t%s\t%s\n' \
+            "$(file_mode "$path")" "$(sha256_file "$path")" "$path"
+        elif [ -d "$path" ]; then
+          printf 'D\t%s\t-\t%s\n' "$(file_mode "$path")" "$path"
+        else
+          exit 2
+        fi
+      done
+  ) | sha256_stdin
 }
 
 state_init() {

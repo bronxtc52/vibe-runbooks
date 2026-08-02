@@ -38,11 +38,19 @@ runtime_ready() {
 }
 
 apply_runtimes() {
-  local global_config
+  local global_config node_preexisting python_preexisting global_preexisting
   if ! have mise || ! have uv; then
     ui_fail "Сначала нужен шаг 30-brew-bundle с mise и uv."
     return 1
   fi
+
+  node_preexisting=false
+  python_preexisting=false
+  global_preexisting=false
+  mise where "node@$NODE_VERSION" >/dev/null 2>&1 &&
+    node_preexisting=true
+  mise where "python@$PYTHON_VERSION" >/dev/null 2>&1 &&
+    python_preexisting=true
 
   MISE_YES=1 mise install \
     "node@$NODE_VERSION" \
@@ -54,15 +62,34 @@ apply_runtimes() {
     return 2
   fi
   if [ ! -e "$global_config" ]; then
+    backup_file_once "$global_config" mise-global >/dev/null
     MISE_YES=1 mise use --global --pin \
       "node@$NODE_VERSION" \
       "python@$PYTHON_VERSION"
   elif [ ! -f "$global_config" ]; then
     ui_fail "Global mise config занят не обычным файлом."
     return 2
+  else
+    global_preexisting=true
   fi
 
   runtime_ready
+  [ -f "$VIBE_MAC_MANIFEST_FILE" ] || return 0
+  if [ "$node_preexisting" = true ]; then
+    manifest_record_runtime node "$NODE_VERSION" true false
+  else
+    manifest_record_runtime node "$NODE_VERSION" false true
+  fi
+  if [ "$python_preexisting" = true ]; then
+    manifest_record_runtime python "$PYTHON_VERSION" true false
+  else
+    manifest_record_runtime python "$PYTHON_VERSION" false true
+  fi
+  if [ "$global_preexisting" = false ]; then
+    manifest_record_file \
+      mise-global .config/mise/config.toml owned_file "" false true \
+      "$(sha256_file "$global_config")" mise-global
+  fi
 }
 
 case "${1:-}" in

@@ -91,11 +91,49 @@ zshrc_has_external_omz() {
 
 apply_shell() {
   local zprofile_block zshrc_block omz_block ghostty_content
-  local ghostty_target aliases_target
+  local ghostty_target aliases_target starship_target
+  local omz_preexisting aliases_preexisting starship_preexisting
+  local zprofile_file_preexisting zshrc_file_preexisting
+  local ghostty_file_preexisting
+  local zprofile_block_preexisting zshrc_block_preexisting
+  local ghostty_block_preexisting omz_tree omz_json
+
+  omz_preexisting=false
+  aliases_preexisting=false
+  starship_preexisting=false
+  zprofile_block_preexisting=false
+  zshrc_block_preexisting=false
+  ghostty_block_preexisting=false
+  zprofile_file_preexisting=false
+  zshrc_file_preexisting=false
+  ghostty_file_preexisting=false
+  [ -d "$HOME/.oh-my-zsh" ] && omz_preexisting=true
+  [ -e "$HOME/.config/vibe-mac/aliases.zsh" ] && aliases_preexisting=true
+  [ -e "$HOME/.config/starship.toml" ] && starship_preexisting=true
+  [ -e "$HOME/.zprofile" ] && zprofile_file_preexisting=true
+  [ -e "$HOME/.zshrc" ] && zshrc_file_preexisting=true
+  if [ -f "$HOME/.zprofile" ] &&
+    /usr/bin/grep -Fqx '# >>> vibe-mac managed:zprofile >>>' \
+      "$HOME/.zprofile"; then
+    zprofile_block_preexisting=true
+  fi
+  if [ -f "$HOME/.zshrc" ] &&
+    /usr/bin/grep -Fqx '# >>> vibe-mac managed:zshrc >>>' \
+      "$HOME/.zshrc"; then
+    zshrc_block_preexisting=true
+  fi
+  ghostty_target="$HOME/Library/Application Support/com.mitchellh.ghostty/config"
+  [ -e "$ghostty_target" ] && ghostty_file_preexisting=true
+  if [ -f "$ghostty_target" ] &&
+    /usr/bin/grep -Fqx '# >>> vibe-mac managed:ghostty >>>' \
+      "$ghostty_target"; then
+    ghostty_block_preexisting=true
+  fi
 
   install_oh_my_zsh
 
   aliases_target="$HOME/.config/vibe-mac/aliases.zsh"
+  starship_target="$HOME/.config/starship.toml"
   if [ -e "$aliases_target" ] &&
     ! /usr/bin/cmp -s "$VIBE_MAC_ROOT/config/aliases.zsh" "$aliases_target"; then
     ui_fail "Путь $aliases_target уже занят другим содержимым."
@@ -107,7 +145,7 @@ apply_shell() {
     aliases-zsh
   install_file_if_absent \
     "$VIBE_MAC_ROOT/config/starship.toml" \
-    "$HOME/.config/starship.toml" \
+    "$starship_target" \
     starship-toml
 
   # shellcheck disable=SC2016
@@ -157,8 +195,44 @@ $zshrc_block"
   managed_block_upsert "$HOME/.zshrc" zshrc "$zshrc_block" zshrc
 
   ghostty_content="$(/bin/cat "$VIBE_MAC_ROOT/config/ghostty.config")"
-  ghostty_target="$HOME/Library/Application Support/com.mitchellh.ghostty/config"
   managed_block_upsert "$ghostty_target" ghostty "$ghostty_content" ghostty-config
+
+  [ -f "$VIBE_MAC_MANIFEST_FILE" ] || return 0
+  if [ "$zprofile_block_preexisting" = false ]; then
+    manifest_record_file \
+      zprofile .zprofile managed_block zprofile "$zprofile_file_preexisting" true \
+      "$(sha256_text "$zprofile_block")" zprofile
+  fi
+  if [ "$zshrc_block_preexisting" = false ]; then
+    manifest_record_file \
+      zshrc .zshrc managed_block zshrc "$zshrc_file_preexisting" true \
+      "$(sha256_text "$zshrc_block")" zshrc
+  fi
+  if [ "$ghostty_block_preexisting" = false ]; then
+    manifest_record_file \
+      ghostty \
+      "Library/Application Support/com.mitchellh.ghostty/config" \
+      managed_block ghostty "$ghostty_file_preexisting" true \
+      "$(sha256_text "$ghostty_content")" ghostty-config
+  fi
+  if [ "$aliases_preexisting" = false ]; then
+    manifest_record_file \
+      aliases .config/vibe-mac/aliases.zsh owned_file "" false true \
+      "$(sha256_file "$aliases_target")" aliases-zsh
+  fi
+  if [ "$starship_preexisting" = false ]; then
+    manifest_record_file \
+      starship .config/starship.toml owned_file "" false true \
+      "$(sha256_file "$starship_target")" starship-toml
+  fi
+  if [ "$omz_preexisting" = false ]; then
+    omz_tree="$(tree_sha256 "$HOME/.oh-my-zsh")"
+    omz_json="{\"preexisting\":false,\"owned\":true,\"version_before\":\"\",\"version_after\":\"$OH_MY_ZSH_COMMIT\",\"tree_sha256\":\"$omz_tree\"}"
+  else
+    omz_json='{"preexisting":true,"owned":false,"version_before":"external","version_after":"external","tree_sha256":""}'
+  fi
+  json_set_json_atomic \
+    "$VIBE_MAC_MANIFEST_FILE" components.oh_my_zsh "$omz_json"
 }
 
 trap cleanup_omz_temp EXIT

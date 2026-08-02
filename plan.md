@@ -984,11 +984,11 @@ CI:
 
 ### Layer 4 — operations и supply chain
 
-- [ ] Красные tests `verify`/`doctor`/`uninstall`/bootstrap attacks.
-- [ ] Реализовать три operational scripts и launchers.
-- [ ] Реализовать bootstrap template и local deterministic release fixture.
-- [ ] Проверить все fail-closed cases и temp cleanup.
-- [ ] Маленький атомарный commit после secret scan.
+- [x] Красные tests `verify`/`doctor`/`uninstall`/bootstrap attacks.
+- [x] Реализовать три operational scripts и launchers.
+- [x] Реализовать bootstrap template и local deterministic release fixture.
+- [x] Проверить все fail-closed cases и temp cleanup.
+- [x] Маленький атомарный commit после secret scan.
 
 ### Layer 5 — миграция, docs, CI
 

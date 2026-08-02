@@ -23,7 +23,8 @@
       "preexisting": false,
       "owned": false,
       "version_before": "",
-      "version_after": ""
+      "version_after": "",
+      "tree_sha256": ""
     }
   },
   "packages": {
@@ -32,19 +33,62 @@
     "dependency_delta": []
   },
   "files": {},
+  "git_defaults": {},
   "defaults": {},
   "runtimes": {
     "node": {
       "version": "",
+      "preexisting": false,
       "owned": false
     },
     "python": {
       "version": "",
+      "preexisting": false,
       "owned": false
     }
   },
   "releases": {
-    "current": "",
-    "previous": ""
+    "current": {
+      "version": "",
+      "path_kind": "runtime_relative",
+      "path": "",
+      "archive_sha256": "",
+      "tree_sha256": "",
+      "owned": false
+    },
+    "previous": {
+      "version": "",
+      "path_kind": "runtime_relative",
+      "path": "",
+      "archive_sha256": "",
+      "tree_sha256": "",
+      "owned": false
+    }
+  },
+  "current_link": {
+    "path_kind": "runtime_relative",
+    "path": "current",
+    "target": "",
+    "owned": false
+  },
+  "launchers": {
+    "verify": {
+      "path_kind": "runtime_relative",
+      "path": "bin/vibe-mac-verify",
+      "sha256": "",
+      "owned": false
+    },
+    "doctor": {
+      "path_kind": "runtime_relative",
+      "path": "bin/vibe-mac-doctor",
+      "sha256": "",
+      "owned": false
+    },
+    "uninstall": {
+      "path_kind": "runtime_relative",
+      "path": "bin/vibe-mac-uninstall",
+      "sha256": "",
+      "owned": false
+    }
   }
 }
