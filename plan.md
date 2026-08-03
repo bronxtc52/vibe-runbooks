@@ -340,8 +340,8 @@ tests/policy/secrets.bats
 - `state/progress-template.json` — схема из раздела 3.1.
 - `.gitignore` — только runtime/test/release artifacts нового продукта.
 - `.shellcheckrc` — source-path и узкие обоснованные исключения нового дерева.
-- `.github/workflows/ci.yml` — pinned actions, Ubuntu suite и macOS arm64
-  read-only smoke из раздела 12.3.
+- `.github/workflows/ci.yml` — pinned actions/tools, portable static lint на
+  Ubuntu и полный sandbox suite на целевом macOS 14 arm64.
 
 ### 4.3 Сохранить
 
@@ -983,13 +983,16 @@ DRY_RUN=1 /bin/bash ./doctor.sh
 
 CI:
 
-- Ubuntu: checkout, ShellCheck, Bats, весь sandbox suite;
-- macOS 14 arm64: assert `uname -m = arm64`, `/bin/bash --version`,
-  `bash -n` и read-only DRY_RUN/tripwire;
+- Ubuntu: checkout и pinned ShellCheck `--lint-only`, без запуска
+  macOS-specific probes под GNU userland;
+- macOS 14 arm64: assert `uname -m = arm64`, pinned
+  ShellCheck/Bats/ripgrep с literal SHA-256 и весь sandbox suite через
+  системный Bash 3.2 в byte-locale `LANG=C`, `LC_ALL=C`;
 - checkout action pinned на
   `actions/checkout@11d5960a326750d5838078e36cf38b85af677262`
   (tag `v4.4.0`), не mutable tag;
-- macOS smoke не ставит CLT/Homebrew/packages и не вызывает сеть/GUI/sudo.
+- macOS full suite использует только синтетические HOME/PATH/fixtures: он не
+  ставит CLT/Homebrew/packages и не вызывает product network/GUI/sudo.
 
 Если выбранный hosted label перестанет быть arm64, job падает честно; он не
 подменяется Intel smoke. Реальный clean-Mac install остаётся release-гейтом.

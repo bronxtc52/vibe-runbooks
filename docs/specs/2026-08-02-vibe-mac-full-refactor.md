@@ -512,8 +512,9 @@ Exit code:
   mutating/network/sudo-команд: новых backup, managed-блоков и state churn нет.
 - Workspace: существующий каталог не перезаписывается; новый создаётся без
   remote/push/deploy.
-- CI: `bash -n`, ShellCheck, Bats на Ubuntu; все entrypoint запускаются также
-  через `/bin/bash`; отдельный read-only smoke выполняется на macOS runner.
+- CI: portable `bash -n` и pinned ShellCheck на Ubuntu; весь Bats/sandbox suite
+  выполняется на целевом macOS 14 arm64 runner через системный Bash 3.2 в
+  byte-locale и с pinned test tools, без реальных изменений.
 
 Числа тестов в отчёте всегда привязываются к SHA проверенной базы.
 

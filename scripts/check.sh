@@ -8,7 +8,8 @@ CHECK_TEMP=
 REAL_HOME="${HOME:?HOME не задан}"
 
 usage() {
-  printf '%s\n' "Запуск: ./scripts/check.sh [--smoke-only]"
+  printf '%s\n' \
+    "Запуск: ./scripts/check.sh [--smoke-only|--lint-only]"
 }
 
 cleanup() {
@@ -168,6 +169,12 @@ case "$MODE" in
       exit 2
     }
     ;;
+  --lint-only)
+    [ "$#" -eq 1 ] || {
+      usage >&2
+      exit 2
+    }
+    ;;
   -h|--help)
     usage
     exit 0
@@ -181,10 +188,19 @@ esac
 umask 077
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
-require_command python3
 run_syntax
-run_smoke
-if [ "$MODE" = full ]; then
-  run_shellcheck
-  run_bats
-fi
+case "$MODE" in
+  --lint-only)
+    run_shellcheck
+    ;;
+  --smoke-only)
+    require_command python3
+    run_smoke
+    ;;
+  full)
+    require_command python3
+    run_smoke
+    run_shellcheck
+    run_bats
+    ;;
+esac
