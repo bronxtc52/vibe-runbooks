@@ -1,25 +1,47 @@
 {
-  "_comment": "Шаблон отслеживания прогресса. Codex копирует его в state/progress.json и обновляет по ходу. Статусы: pending | in_progress | done | blocked | skipped (пропуск по выбору человека — фазы 05 и 06, см. INDEX.md).",
-  "runbook_version": "0.1.0",
-  "learner": {
-    "name": null,
-    "started_at": null,
-    "arch": null,
-    "macos": null
-  },
-  "phases": [
-    { "id": "00-preflight",    "title": "Проверка машины",          "status": "pending", "notes": "" },
-    { "id": "01-macbook-setup","title": "Настройка MacBook",        "status": "pending", "notes": "" },
-    { "id": "02-foundation",   "title": "Терминал + Homebrew",      "status": "pending", "notes": "" },
-    { "id": "03-git-github", "title": "Git и GitHub",               "status": "pending", "notes": "" },
-    { "id": "04-ai-helpers", "title": "Node + Claude Code + Codex", "status": "pending", "notes": "" },
-    { "id": "05-flutter",    "title": "Мобильный трек: Flutter + цеха (по желанию)",  "status": "pending", "notes": "" },
-    { "id": "06-first-win",  "title": "Мобильная победа (требует фазу 05)",           "status": "pending", "notes": "" },
-    { "id": "05w-netlify",   "title": "Веб-трек: Netlify CLI + вход (по желанию)",    "status": "pending", "notes": "" },
-    { "id": "06w-first-site","title": "Веб-победа: сайт по ссылке (требует 05w)",     "status": "pending", "notes": "" },
-    { "id": "07-checkpoint", "title": "Чек-поинт Фазы 0",           "status": "pending", "notes": "" }
-  ],
-  "appendix": [
-    { "id": "99-appendix-backend", "title": "Python/venv + Railway (по требованию)", "status": "pending", "notes": "Не часть первого маршрута. Только когда дойдёт до Фазы 2." }
-  ]
+  "schema_version": 1,
+  "installer_version": "0.1.0-dev",
+  "last_run_id": "",
+  "steps": {
+    "00-preflight": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "10-xcode-clt": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "20-homebrew": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "30-brew-bundle": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "40-shell": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "50-runtimes": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "60-ai-agents": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "70-git-github": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "80-defaults": {
+      "status": "pending",
+      "completed_at": ""
+    },
+    "90-workspace": {
+      "status": "pending",
+      "completed_at": ""
+    }
+  }
 }

@@ -1,7 +1,17 @@
-# Рантайм-прогресс новичка (создаётся при прохождении, не храним в репозитории)
-state/progress.json
-state/progress.log
-
-# Системный мусор / бэкапы sed
 .DS_Store
 *.bak
+
+# Локальные runtime/test/release artifacts
+output/
+dist/
+release/
+tmp/
+.bats-run/
+.vibe-mac-test/
+__pycache__/
+
+# Runtime state создаётся только при локальном запуске
+state/progress.json
+state/manifest.json
+state/install.lock.d/
+state/*.log

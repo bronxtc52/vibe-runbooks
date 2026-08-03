@@ -1,0 +1,5 @@
+/lib/util.sh export-subst
+/verify.sh export-subst
+/install.sh export-subst
+/doctor.sh export-subst
+/uninstall.sh export-subst

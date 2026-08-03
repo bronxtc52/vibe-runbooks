@@ -1,0 +1,3 @@
+cask "zed"
+cask "raycast"
+cask "visual-studio-code"
