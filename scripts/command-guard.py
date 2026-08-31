@@ -67,9 +67,15 @@ _CURL_PIPE_RE = [
 ]
 
 
-# `sudo npm i -g …` и родня: sudo сразу перед менеджером пакетов Node
-# (допускаем флаги sudo между ними: `sudo -H npm`, `sudo -u root node`).
-_SUDO_NODE_RE = re.compile(r"\bsudo\s+(?:-\w+(?:\s+\S+)?\s+)*(npm|npx|node|yarn|pnpm)\b")
+# `sudo npm i -g …` и родня: sudo сразу перед менеджером пакетов Node.
+# Допускаем флаги sudo между ними (`sudo -H npm`, `sudo -u root node`) и полный
+# путь до бинарника (`sudo /opt/homebrew/bin/npm` — на Mac это обычная запись).
+# Якорь `^` обязателен: без него правило срабатывало бы на любое УПОМИНАНИЕ
+# строки внутри команды — `printf 'sudo npm install'` или heredoc, которым
+# пишут вот эту самую статью в TROUBLESHOOTING. Сторож обязан смотреть на
+# позицию команды, а не на текст (принцип «анти-параноик» из шапки файла).
+_SUDO_NODE_RE = re.compile(
+    r"^sudo\s+(?:-\w+(?:\s+\S+)?\s+)*(?:\S*/)?(npm|npx|node|yarn|pnpm)\b")
 
 
 def _has_secret_path(text):
@@ -206,6 +212,9 @@ _SELFTEST = [
     ("sudo npx create-react-app my-app", DENY),
     ("sudo -u root node server.js", DENY),
     ("sudo yarn global add serve", DENY),
+    ("sudo /opt/homebrew/bin/npm install -g foo", DENY),
+    ("sudo /usr/local/bin/node server.js", DENY),
+    ("echo ok && sudo npm i -g bar", DENY),
     # предупреждения (проходят)
     ("git push -f origin feat/rebase-cleanup", WARN),
     ("git push origin --delete feat/old", WARN),
@@ -238,6 +247,11 @@ _SELFTEST = [
     ("sudo softwareupdate --install-rosetta --agree-to-license", ALLOW),
     ("sudo xcodebuild -license accept", ALLOW),
     ("sudo apt-get install -y nodejs", ALLOW),
+    # упоминание строки внутри команды — не команда: сторож не должен мешать
+    # писать документацию про то, чего сам не разрешает
+    ("printf 'sudo npm install'", ALLOW),
+    ("echo \"не используй sudo npm\" >> notes.md", ALLOW),
+    ("grep -n 'sudo npm' TROUBLESHOOTING.md", ALLOW),
 ]
 
 

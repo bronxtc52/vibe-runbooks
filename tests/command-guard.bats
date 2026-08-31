@@ -69,3 +69,13 @@ hook() { # hook "<команда>" — прогнать команду чере�
   run hook "sudo xcodebuild -license accept"
   [ "$status" -eq 0 ]
 }
+
+@test "deny: sudo with full path to npm is blocked" {
+  run hook "sudo /opt/homebrew/bin/npm install -g foo"
+  [ "$status" -eq 2 ]
+}
+
+@test "allow: quoted mention of sudo npm is text, not a command" {
+  run hook "printf 'sudo npm install'"
+  [ "$status" -eq 0 ]
+}
