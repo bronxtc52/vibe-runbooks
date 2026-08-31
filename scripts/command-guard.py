@@ -5,7 +5,8 @@
 ЗАЧЕМ: новичок не отличит опасную команду от безопасной. Этот сторож ловит
 известные «выстрелы в ногу» добросовестного агента: git push --force,
 git reset --hard, git clean -f, rm -rf по важным путям, удаление .env,
-исполнение скриптов из интернета через curl | bash.
+исполнение скриптов из интернета через curl | bash, sudo поверх npm/npx/node
+(ломает права в домашней папке — потом всё падает с EACCES).
 Главный урок за ним: пока работа не отправлена (push) — она нигде не сохранена;
 reset/clean уничтожают именно то, что ещё нигде не зафиксировано.
 
@@ -64,6 +65,11 @@ _CURL_PIPE_RE = [
     re.compile(r"\b(ba|z)?sh\s+<\(\s*(curl|wget)\b"),
     re.compile(r"\b(ba|z)?sh\s+-c\s+[\"']?\$\((curl|wget)\b"),
 ]
+
+
+# `sudo npm i -g …` и родня: sudo сразу перед менеджером пакетов Node
+# (допускаем флаги sudo между ними: `sudo -H npm`, `sudo -u root node`).
+_SUDO_NODE_RE = re.compile(r"\bsudo\s+(?:-\w+(?:\s+\S+)?\s+)*(npm|npx|node|yarn|pnpm)\b")
 
 
 def _has_secret_path(text):
@@ -141,6 +147,16 @@ def check_segment(seg):
     if re.search(_GIT + r"branch\s+-D\b", seg):
         return WARN, "git branch -D удаляет ветку даже с несмерженной работой. Осознанно — продолжай."
 
+    # --- G7: sudo поверх менеджеров пакетов Node ----------------------------
+    # `sudo npm install -g …` кладёт файлы root'ом в домашнюю папку и в /usr/local:
+    # после этого обычный npm ломается с EACCES, а лечение неочевидно новичку.
+    # Правильный путь на Mac — Homebrew/nvm, они ставят БЕЗ sudo.
+    if _SUDO_NODE_RE.search(seg):
+        return DENY, ("sudo с npm/npx/node ломает права доступа: часть файлов станет "
+                      "принадлежать root, и обычные команды начнут падать с EACCES. "
+                      "На Mac Node и пакеты ставятся БЕЗ sudo — через Homebrew или nvm. "
+                      "Повтори ту же команду без «sudo».")
+
     return ALLOW, ""
 
 
@@ -184,6 +200,12 @@ _SELFTEST = [
     ("rm -rf / ", DENY),
     ("rm -rf .git", DENY),
     ("sudo rm -rf /var --no-preserve-root", DENY),
+    ("sudo npm install -g netlify-cli", DENY),
+    ("sudo npm i -g @anthropic-ai/claude-code", DENY),
+    ("sudo -H npm install -g typescript", DENY),
+    ("sudo npx create-react-app my-app", DENY),
+    ("sudo -u root node server.js", DENY),
+    ("sudo yarn global add serve", DENY),
     # предупреждения (проходят)
     ("git push -f origin feat/rebase-cleanup", WARN),
     ("git push origin --delete feat/old", WARN),
@@ -211,6 +233,11 @@ _SELFTEST = [
     ("git stash push -u", ALLOW),
     ("git checkout feat/x", ALLOW),
     ("netlify deploy --prod --dir .", ALLOW),
+    ("npm install -g netlify-cli", ALLOW),
+    ("npx create-react-app my-app", ALLOW),
+    ("sudo softwareupdate --install-rosetta --agree-to-license", ALLOW),
+    ("sudo xcodebuild -license accept", ALLOW),
+    ("sudo apt-get install -y nodejs", ALLOW),
 ]
 
 

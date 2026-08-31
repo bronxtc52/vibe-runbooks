@@ -49,3 +49,23 @@ hook() { # hook "<команда>" — прогнать команду чере�
   run bash -c "printf 'не json' | python3 '$GUARD'"
   [ "$status" -eq 0 ]
 }
+
+@test "deny: sudo npm install -g is blocked (breaks file permissions)" {
+  run hook "sudo npm install -g netlify-cli"
+  [ "$status" -eq 2 ]
+}
+
+@test "deny: sudo npx is blocked too" {
+  run hook "sudo npx create-react-app my-app"
+  [ "$status" -eq 2 ]
+}
+
+@test "allow: npm install -g without sudo passes (this is how runbook installs)" {
+  run hook "npm install -g netlify-cli"
+  [ "$status" -eq 0 ]
+}
+
+@test "allow: unrelated sudo command passes (anti-paranoid)" {
+  run hook "sudo xcodebuild -license accept"
+  [ "$status" -eq 0 ]
+}
